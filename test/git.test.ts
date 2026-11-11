@@ -64,6 +64,20 @@ describe('readHistory', () => {
     expect(readHistory(root, 365, NOW)).toEqual([]);
   });
 
+  it('returns [] for an empty repo under a non-English locale', () => {
+    const root = makeRepo([]);
+    const saved = { LANG: process.env.LANG, LC_ALL: process.env.LC_ALL };
+    process.env.LANG = 'de_DE.UTF-8';
+    process.env.LC_ALL = 'de_DE.UTF-8';
+    try {
+      expect(readHistory(root, 365, NOW)).toEqual([]);
+    } finally {
+      for (const [k, v] of Object.entries(saved)) {
+        if (v === undefined) delete process.env[k]; else process.env[k] = v;
+      }
+    }
+  });
+
   it('flags agent trailers in the message', () => {
     const root = makeRepo([{ files: { 'a.ts': 'x\n' }, message: 'feat\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>' }]);
     expect(readHistory(root, 365, NOW)[0].agentTrailer).toBe(true);

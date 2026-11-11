@@ -14,6 +14,7 @@ export function git(root: string, args: string[]): string {
     return execFileSync('git', args, {
       cwd: root,
       encoding: 'utf8',
+      env: { ...process.env, LC_ALL: 'C' },
       maxBuffer: 512 * 1024 * 1024,
       stdio: ['ignore', 'pipe', 'pipe'],
     });
@@ -67,16 +68,15 @@ function parseNumstat(body: string): FileChange[] {
 
 export function readHistory(root: string, sinceDays: number, now: Date = new Date()): Commit[] {
   const since = new Date(now.getTime() - sinceDays * 86_400_000).toISOString();
-  let out: string;
   try {
-    out = git(root, [
-      'log', '--no-merges', '-M', '-z', '--numstat', `--since=${since}`,
-      '--format=%x1e%H%x1f%ae%x1f%aI%x1f%B%x1f',
-    ]);
-  } catch (e) {
-    if (e instanceof GitError && /does not have any commits|unknown revision|bad default revision/i.test(e.stderr)) return [];
-    throw e;
+    git(root, ['rev-parse', '--verify', '-q', 'HEAD']);
+  } catch {
+    return []; // no commits yet (exit status based, locale independent)
   }
+  const out = git(root, [
+    'log', '--no-merges', '-M', '-z', '--numstat', `--since=${since}`,
+    '--format=%x1e%H%x1f%ae%x1f%aI%x1f%B%x1f',
+  ]);
   const commits: Commit[] = [];
   for (const rec of out.split('\x1e')) {
     if (!rec.trim()) continue;
