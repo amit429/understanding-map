@@ -1,0 +1,5 @@
+{
+  "name": "understanding-map",
+  "version": "0.1.0",
+  "description": "Maps which parts of your codebase you still understand, so AI-written code does not leave you with dark zones."
+}

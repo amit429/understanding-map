@@ -1,0 +1,21 @@
+{
+  "name": "understanding-map",
+  "version": "0.1.0",
+  "description": "Claude Code plugin that maps which parts of your codebase you still understand.",
+  "type": "module",
+  "scripts": {
+    "test": "vitest run",
+    "build": "esbuild src/cli.ts --bundle --platform=node --format=esm --target=node18 --outfile=dist/umap.js --banner:js=\"import { createRequire } from 'module'; const require = createRequire(import.meta.url);\"",
+    "typecheck": "tsc --noEmit"
+  },
+  "engines": { "node": ">=18" },
+  "dependencies": { "d3-hierarchy": "^3.1.2", "picomatch": "^4.0.2" },
+  "devDependencies": {
+    "@types/d3-hierarchy": "^3.1.7",
+    "@types/node": "^20.14.0",
+    "@types/picomatch": "^3.0.1",
+    "esbuild": "^0.24.0",
+    "typescript": "^5.6.0",
+    "vitest": "^2.1.0"
+  }
+}
