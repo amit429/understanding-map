@@ -70,7 +70,7 @@ export const commands: Record<string, Command> = {
   map: guarded((root, args) => {
     const m = buildMap(root);
     const { flags } = parseArgs(args);
-    const reportPath = flags.has('--no-report') ? null : writeReport(root, renderReport(m));
+    const reportPath = flags.has('--no-report') ? null : writeReport(root, renderReport(m, { threshold: loadConfig(root).threshold }));
     if (flags.has('--json')) {
       out(JSON.stringify(m));
       return 0;

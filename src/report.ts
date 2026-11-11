@@ -85,12 +85,12 @@ function reportData(m: MapResult, threshold: number) {
 
 const safeJson = (v: unknown) => JSON.stringify(v).replace(/</g, '\\u003c').replace(/\u2028/g, '\\u2028').replace(/\u2029/g, '\\u2029');
 
-export function renderReport(m: MapResult): string {
+export function renderReport(m: MapResult, opts: { threshold?: number } = {}): string {
   const fill: Record<string, string> = {
     __HEADER__: renderHeader(m),
     __TREEMAP__: renderTreemap(m.zones),
     __TABLE__: renderTable(m.zones),
-    __DATA__: safeJson(reportData(m, DEFAULT_CONFIG.threshold)),
+    __DATA__: safeJson(reportData(m, opts.threshold ?? DEFAULT_CONFIG.threshold)),
   };
   return REPORT_TEMPLATE.replace(/__(HEADER|TREEMAP|TABLE|DATA)__/g, (k) => fill[k]);
 }

@@ -53,6 +53,13 @@ describe('renderReport', () => {
     for (const p of core.people) expect(Object.keys(p).sort()).toEqual(['active', 'evidence', 'handle', 'level']);
   });
 
+  it('uses a custom threshold for understoodBy', () => {
+    const d = data(renderReport(result('team', [zone('z', 'fragile', [person('amy', 50, true), person('cy', 20, true)])]), { threshold: 40 }));
+    expect(d.threshold).toBe(40);
+    expect(d.zones[0].understoodBy).toEqual(['amy']);
+    expect(data(renderReport(team)).zones[0].understoodBy).toEqual(['amy']);
+  });
+
   it('in solo mode lists only my evidence and no team arrays content', () => {
     const d = data(renderReport(result('solo', [zone('x', 'owned', [person('me', 90, true), person('other', 90, true)])])));
     expect(d.zones[0].people.map((p: { handle: string }) => p.handle)).toEqual(['me']);
