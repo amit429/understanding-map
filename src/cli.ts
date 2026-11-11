@@ -5,6 +5,7 @@ import { ensureUnderstandingIgnore, isSetUp, loadConfig } from './config.js';
 import { repoRootOf } from './git.js';
 import { buildMap } from './pipeline.js';
 import { renderReport, writeReport } from './report.js';
+import { runSetup } from './setup.js';
 import { formatSummary, formatWho } from './terminal.js';
 import type { MapResult, ZoneResult } from './types.js';
 
@@ -64,6 +65,31 @@ export const commands: Record<string, Command> = {
     const mode = loadConfig(root).mode;
     if (parseArgs(args).flags.has('--json')) out(JSON.stringify({ setUp, mode, root }));
     else out(setUp ? `Understanding Map is set up (${mode} mode) in ${root}` : 'Understanding Map is not set up yet. Run /understanding-map:setup.');
+    return 0;
+  }),
+
+  setup: guarded((root, args) => {
+    const valueOf = (flag: string): string | undefined => {
+      const i = args.indexOf(flag);
+      return i >= 0 ? args[i + 1] : undefined;
+    };
+    const mode = valueOf('--mode');
+    if (mode !== 'solo' && mode !== 'team') {
+      err('Usage: setup --mode solo|team [--critical "<glob>,<glob>"]');
+      return 2;
+    }
+    const critical = (valueOf('--critical') ?? '').split(',').map((g) => g.trim()).filter(Boolean);
+    const r = runSetup(root, { mode, critical });
+    const lines = [
+      `Set up Understanding Map in ${mode} mode.`,
+      `Wrote ${relative(root, r.configPath)}${critical.length ? ` with critical areas: ${critical.join(', ')}` : ''}.`,
+      mode === 'solo'
+        ? 'Everything in .understanding/ stays on this machine (it is ignored by git).'
+        : 'Local data and the HTML report are ignored by git; passes and anonymous zone totals can be shared.',
+    ];
+    if (r.gitattributesLines.length) lines.push(`Added ${r.gitattributesLines.length} merge rule(s) to .gitattributes so shared files merge cleanly.`);
+    if (mode === 'team') lines.push('Commit .understanding/config.json, events/ and agent-share/ with your normal commits — only passes and anonymous zone totals are shared.');
+    out(lines.join('\n'));
     return 0;
   }),
 
