@@ -4,6 +4,7 @@ import { pathToFileURL } from 'node:url';
 import { isSetUp, loadConfig } from './config.js';
 import { repoRootOf } from './git.js';
 import { buildMap } from './pipeline.js';
+import { renderReport, writeReport } from './report.js';
 import { formatSummary, formatWho } from './terminal.js';
 import type { MapResult, ZoneResult } from './types.js';
 
@@ -68,11 +69,13 @@ export const commands: Record<string, Command> = {
 
   map: guarded((root, args) => {
     const m = buildMap(root);
-    if (parseArgs(args).flags.has('--json')) {
+    const { flags } = parseArgs(args);
+    const reportPath = flags.has('--no-report') ? null : writeReport(root, renderReport(m));
+    if (flags.has('--json')) {
       out(JSON.stringify(m));
       return 0;
     }
-    let text = formatSummary(m, null);
+    let text = formatSummary(m, reportPath);
     if (!isSetUp(root)) text += '\nNot set up yet — run /understanding-map:setup to choose solo or team.';
     out(text);
     return 0;

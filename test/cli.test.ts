@@ -1,4 +1,4 @@
-import { mkdtempSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, realpathSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -40,6 +40,20 @@ describe('cli', () => {
     expect(t.stdout).toContain('Not set up yet — run /understanding-map:setup to choose solo or team.');
     const j = await run(root, ['map', '--json']);
     expect(JSON.parse(j.stdout).zones.length).toBe(3);
+  });
+
+  it('map writes .understanding/report.html and prints its path; --no-report writes nothing; --json stays one object', async () => {
+    const root = fixture();
+    const noReport = await run(root, ['map', '--no-report']);
+    expect(existsSync(join(root, '.understanding', 'report.html'))).toBe(false);
+    expect(noReport.stdout).not.toContain('Report:');
+    const j = await run(root, ['map', '--json']);
+    expect(() => JSON.parse(j.stdout)).not.toThrow();
+    expect(existsSync(join(root, '.understanding', 'report.html'))).toBe(true);
+    rmSync(join(root, '.understanding', 'report.html'));
+    const t = await run(root, ['map']);
+    expect(t.stdout).toContain(`Report: ${join(realpathSync(root), '.understanding', 'report.html')}`);
+    expect(readFileSync(join(root, '.understanding', 'report.html'), 'utf8')).toContain('Scores are estimates');
   });
 
   it('zone resolves a file path to its zone', async () => {
