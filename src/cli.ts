@@ -3,6 +3,7 @@ import { relative, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { ensureUnderstandingIgnore, isSetUp, loadConfig } from './config.js';
 import { repoRootOf } from './git.js';
+import { onPostToolUse, onStop } from './hooks.js';
 import { buildMap } from './pipeline.js';
 import { renderReport, writeReport } from './report.js';
 import { handoffSet, markUnverifiable, recordResult, skipHandoff, type Grade } from './record.js';
@@ -67,7 +68,27 @@ const valueOf = (args: string[], flag: string): string | undefined => {
   return i >= 0 ? args[i + 1] : undefined;
 };
 
+async function readStdin(): Promise<string> {
+  let text = '';
+  for await (const chunk of process.stdin) text += String(chunk);
+  return text;
+}
+
 export const commands: Record<string, Command> = {
+  /** Hook entry point: not guarded; reads stdin, never throws, always exits 0. */
+  hook: async (args) => {
+    try {
+      let input: unknown = null;
+      try { input = JSON.parse(await readStdin()); } catch { /* malformed or empty input */ }
+      if (args[0] === 'post-tool-use') onPostToolUse(input);
+      else if (args[0] === 'stop') {
+        const text = onStop(input);
+        if (text) out(text);
+      }
+    } catch { /* hooks never fail */ }
+    return 0;
+  },
+
   status: guarded((root, args) => {
     const setUp = isSetUp(root);
     const mode = loadConfig(root).mode;
