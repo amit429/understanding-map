@@ -124,7 +124,7 @@ export function showAtRef(root: string, ref: string, path: string): string | nul
 }
 
 export function listAtRef(root: string, ref: string, dir: string): string[] {
-  const d = dir.replace(/^\.?\/?/, '').replace(/\/+$/, '');
+  const d = dir.replace(/^\.\//, '').replace(/\/+$/, '');
   try {
     const args = ['ls-tree', '-r', '--name-only', '-z', ref];
     if (d) args.push('--', `${d}/`);

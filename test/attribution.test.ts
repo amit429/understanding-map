@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
@@ -111,18 +111,49 @@ describe('syncAgentShare / readAgentShares', () => {
     for (const l of allLines(root)) expect(Object.keys(JSON.parse(l)).sort()).toEqual(['agentLines', 'week', 'zone']);
   });
 
-  it('unions working tree and default ref, deduplicated by line', () => {
-    const line = JSON.stringify({ zone: 'src', agentLines: 6, week: '2026-W46' });
-    const other = JSON.stringify({ zone: 'lib', agentLines: 1, week: '2026-W45' });
-    const root = makeRepo([{ files: { '.understanding/agent-share/aaaa1111.jsonl': line + '\n', 'x.txt': '1' } }]);
-    gitIn(root, ['branch', 'base']);
+  const L = (zone: string, agentLines: number, week = '2026-W46') => JSON.stringify({ zone, agentLines, week });
+  const shareIn = (root: string, name: string, lines: string[]) => {
     mkdirSync(join(root, '.understanding', 'agent-share'), { recursive: true });
-    writeFileSync(join(root, '.understanding', 'agent-share', 'bbbb2222.jsonl'), line + '\n' + other + '\n');
-    const r = readAgentShares(root, 'base');
-    expect(r).toHaveLength(2);
-    expect(r).toContainEqual({ zone: 'lib', agentLines: 1, week: '2026-W45' });
-    expect(readAgentShares(root, null)).toHaveLength(2);
-    expect(readAgentShares(tmp(), null)).toEqual([]);
+    writeFileSync(join(root, '.understanding', 'agent-share', name), lines.join('\n') + '\n');
+  };
+
+  it('returns a share file that exists only at the ref', () => {
+    const root = makeRepo([{ files: { '.understanding/agent-share/aaaa1111.jsonl': L('src', 6) + '\n' } }]);
+    gitIn(root, ['branch', 'base']);
+    rmSync(join(root, '.understanding'), { recursive: true });
+    expect(readAgentShares(root, 'base')).toEqual([{ zone: 'src', agentLines: 6, week: '2026-W46' }]);
+    expect(readAgentShares(root, null)).toEqual([]);
+  });
+
+  it('counts ref lines once when the working copy is the ref copy plus an appended line', () => {
+    const root = makeRepo([{ files: { '.understanding/agent-share/aaaa1111.jsonl': L('src', 6) + '\n' } }]);
+    gitIn(root, ['branch', 'base']);
+    shareIn(root, 'aaaa1111.jsonl', [L('src', 6), L('lib', 1, '2026-W45')]);
+    expect(readAgentShares(root, 'base')).toEqual([
+      { zone: 'src', agentLines: 6, week: '2026-W46' }, { zone: 'lib', agentLines: 1, week: '2026-W45' },
+    ]);
+  });
+
+  it('keeps repeated identical lines within one file and across different machine files', () => {
+    const root = tmp();
+    shareIn(root, 'aaaa1111.jsonl', [L('src', 3), L('src', 3)]);
+    shareIn(root, 'bbbb2222.jsonl', [L('src', 3)]);
+    expect(readAgentShares(root, null)).toHaveLength(3);
+  });
+
+  it('appends per-week entries across commits and ignores paths outside any zone', () => {
+    const root = tmp();
+    const cs = [
+      commit('c3', '2026-11-12T10:00:00Z', [['src/a.ts', 4]]),
+      commit('c2', '2026-11-10T10:00:00Z', [['src/a.ts', 2], ['nozone.ts', 9]]),
+      commit('c1', '2026-11-03T10:00:00Z', [['src/a.ts', 5]]),
+    ];
+    const al = new Map([
+      ['c3', new Map([['src/a.ts', 4]])], ['c2', new Map([['src/a.ts', 2], ['nozone.ts', 9]])], ['c1', new Map([['src/a.ts', 5]])],
+    ]);
+    syncAgentShare(root, zones, cs, al);
+    const got = allLines(root).map((l) => JSON.parse(l)).sort((a, b) => a.week.localeCompare(b.week));
+    expect(got).toEqual([{ zone: 'src', agentLines: 5, week: '2026-W45' }, { zone: 'src', agentLines: 6, week: '2026-W46' }]);
   });
 });
 

@@ -161,12 +161,24 @@ export function syncAgentShare(
   writeFileSync(writtenPath, JSON.stringify(written));
 }
 
+function countDistinct(text: string): Map<string, number> {
+  const m = new Map<string, number>();
+  for (const line of text.split('\n')) if (line.trim()) m.set(line, (m.get(line) ?? 0) + 1);
+  return m;
+}
+
+/** Union of working-tree and default-ref share files. Per file name, each line keeps max(count) copies. */
 export function readAgentShares(root: string, defaultRef: string | null): AgentShareEntry[] {
-  const texts: string[] = [];
+  const byName = new Map<string, Map<string, number>>();
+  const merge = (name: string, text: string) => {
+    const cur = byName.get(name) ?? byName.set(name, new Map()).get(name)!;
+    for (const [line, n] of countDistinct(text)) cur.set(line, Math.max(cur.get(line) ?? 0, n));
+  };
+  // Within one name, merge per source so counts are maxed, not summed.
   if (existsSync(shareDir(root))) {
     for (const n of readdirSync(shareDir(root)).filter((x) => x.endsWith('.jsonl')).sort()) {
       try {
-        texts.push(readFileSync(join(shareDir(root), n), 'utf8'));
+        merge(n, readFileSync(join(shareDir(root), n), 'utf8'));
       } catch { /* skip */ }
     }
   }
@@ -174,18 +186,16 @@ export function readAgentShares(root: string, defaultRef: string | null): AgentS
     for (const p of listAtRef(root, defaultRef, '.understanding/agent-share')) {
       if (!p.endsWith('.jsonl')) continue;
       const t = showAtRef(root, defaultRef, p);
-      if (t !== null) texts.push(t);
+      if (t !== null) merge(p.slice(p.lastIndexOf('/') + 1), t);
     }
   }
-  const seen = new Set<string>();
   const out: AgentShareEntry[] = [];
-  for (const text of texts) {
-    for (const line of text.split('\n')) {
-      if (!line.trim() || seen.has(line)) continue;
-      seen.add(line);
+  for (const lines of byName.values()) {
+    for (const [line, n] of lines) {
       try {
         const v = JSON.parse(line) as AgentShareEntry;
-        if (typeof v.zone === 'string' && typeof v.agentLines === 'number' && typeof v.week === 'string') out.push(v);
+        if (typeof v.zone !== 'string' || typeof v.agentLines !== 'number' || typeof v.week !== 'string') continue;
+        for (let k = 0; k < n; k++) out.push(v);
       } catch { /* skip */ }
     }
   }
