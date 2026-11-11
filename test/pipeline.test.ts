@@ -1,6 +1,6 @@
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { appendEdit } from '../src/editlog';
 import { buildMap } from '../src/pipeline';
 import { formatSummary, formatWho } from '../src/terminal';
@@ -30,6 +30,31 @@ describe('buildMap', () => {
     expect(Object.keys(rows[0]).sort()).toEqual(['agentLines', 'week', 'zone']);
     expect(rows[0]).toMatchObject({ zone: 'human', agentLines: 100 });
     expect(m.zones.find((z) => z.zone.id === 'human')!.agentShare).toBeCloseTo(0.5);
+  });
+});
+
+describe('buildMap fixes', () => {
+  it('does not double-count backfilled edits from sessions the live log already has', () => {
+    const root = fixture();
+    const home = emptyHome();
+    const dir = join(home, '.claude', 'projects', root.replace(/[^A-Za-z0-9-]/g, '-'));
+    mkdirSync(dir, { recursive: true });
+    const rec = (session: string, n: number) => JSON.stringify({
+      type: 'assistant', timestamp: daysAgo(6), sessionId: session,
+      message: { content: [{ type: 'tool_use', name: 'Write', input: { file_path: join(root, 'human/h.ts'), content: body('x', n).trimEnd() } }] },
+    });
+    writeFileSync(join(dir, 's.jsonl'), [rec('S', 100), rec('T', 50)].join('\n') + '\n');
+    appendEdit(root, { file: 'human/h.ts', ranges: [], lines: 100, session: 'S', ts: daysAgo(6) });
+    const m = buildMap(root, { now: NOW, homeDir: home });
+    expect(m.zones.find((z) => z.zone.id === 'human')!.agentShare).toBeCloseTo(0.75); // 100 live + 50 from T, not 250
+  });
+
+  it('falls back to "me" when git user.email is unset', () => {
+    vi.stubEnv('GIT_CONFIG_GLOBAL', '/dev/null');
+    vi.stubEnv('GIT_CONFIG_SYSTEM', '/dev/null');
+    const root = makeRepo([{ files: { 'a/a.ts': body('a') }, date: daysAgo(5) }]);
+    expect(buildMap(root, { now: NOW, homeDir: emptyHome() }).me).toBe('me');
+    vi.unstubAllEnvs();
   });
 });
 

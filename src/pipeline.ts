@@ -53,7 +53,11 @@ export function buildMap(root: string, opts: BuildOptions = {}): MapResult {
   const notedShas = commitsWithNotes(root, 'refs/notes/ai');
   const solo = config.mode === 'solo';
   const edits = readEdits(root);
-  if (solo) edits.push(...backfillSessionEdits(root, opts.homeDir ?? homedir()));
+  if (solo) {
+    // Sessions the live hook already logged would be double-counted by the backfill.
+    const live = new Set(edits.map((e) => e.session));
+    edits.push(...backfillSessionEdits(root, opts.homeDir ?? homedir()).filter((e) => !live.has(e.session)));
+  }
   const agentLines = agentLinesByCommit(commits, edits, notedShas);
 
   const defaultRef = defaultBranchRef(root);
@@ -64,9 +68,9 @@ export function buildMap(root: string, opts: BuildOptions = {}): MapResult {
     sharedAgentShare = sharedShareByZone(root, zones, commits, now, config.historyDays, defaultRef);
   }
 
+  const me = handleFor(currentEmail(root), config) || 'me';
   return scoreMap({
-    config, now,
-    me: handleFor(currentEmail(root), config),
+    config, now, me,
     handleOf: (email) => handleFor(email, config),
     zones, commits, agentLines, sharedAgentShare, fileLoc,
     passes: readPasses(root, defaultRef),

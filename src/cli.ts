@@ -134,6 +134,13 @@ export async function main(argv: string[]): Promise<number> {
   return cmd(rest);
 }
 
-if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+function isDirectRun(): boolean {
+  if (!process.argv[1]) return false;
+  let path = process.argv[1];
+  try { path = realpathSync(path); } catch { /* compare as given */ }
+  return import.meta.url === pathToFileURL(path).href;
+}
+
+if (isDirectRun()) {
   main(process.argv.slice(2)).then((code) => { process.exitCode = code; });
 }
