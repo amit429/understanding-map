@@ -139,9 +139,23 @@ describe('team mode', () => {
     const inp = inputs({ config: team, zones: [big], commits, agentLines: new Map([['c1', new Map([['core/a.ts', 100]])]]) });
     const z = result(inp, 'core');
     const texts = z.people.flatMap((p) => p.evidence.filter((e) => e.kind === 'agent-share').map((e) => e.text));
-    expect(texts).toEqual(['about 10% of this zone was written by agents']);
+    expect(texts).toEqual(['about 10% of this zone was written by agents', 'about 10% of this zone was written by agents']);
     expect(z.agentShare).toBeCloseTo(0.1);
-    expect(person(z.people, 'bo').evidence.some((e) => e.kind === 'agent-share')).toBe(false);
+  });
+
+  it('attaches the zone agent share to every teammate, not just those with agent lines (R14)', () => {
+    const big = mkZone('core', ['core/a.ts', 'core/b.ts'], 1000);
+    const inp = inputs({
+      config: team, zones: [big],
+      commits: [mkCommit('c1', 'ann', 1, [['core/a.ts', 500]]), mkCommit('c2', 'ben', 1, [['core/b.ts', 500]])],
+      agentLines: new Map([['c1', new Map([['core/a.ts', 500]])]]),
+    });
+    const people = personLevels(big, inp);
+    const shareOf = (h: string) => person(people, h).evidence.filter((e) => e.kind === 'agent-share').map((e) => e.text);
+    expect(shareOf('ann')).toEqual(['about 50% of this zone was written by agents']);
+    expect(shareOf('ben')).toEqual(shareOf('ann'));
+    for (const t of [...shareOf('ann'), ...shareOf('ben')]) expect(t).not.toMatch(/\b(ann|ben)\b/);
+    expect(person(people, 'ben').level).toBeGreaterThan(person(people, 'ann').level);
   });
 
   it("uses a teammate's own known agent lines (e.g. trailers) even without a shared share (R12)", () => {

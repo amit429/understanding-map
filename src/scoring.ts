@@ -118,9 +118,12 @@ function historyLevel(handle: string, zone: Zone, touches: Touch[], inp: ScoreIn
     evidence.push({ kind: 'human-commits', text: `added ~${lines} lines here; last commit ${ago(days)}` });
 
     const agentFrac = personAgentFrac(handle, zone, mine, inp);
-    if (agentFrac > 0) {
-      // Only ever the zone-level share: a person's own agent fraction is never shown.
-      evidence.push({ kind: 'agent-share', text: `about ${pct(zoneAgentShare(zone, touches, inp))} of this zone was written by agents` });
+    const zoneShare = zoneAgentShare(zone, touches, inp);
+    // Only ever the zone-level share, never a person's own fraction. In team mode every teammate with
+    // history here gets it, so the entry never singles out who used agents.
+    const teammate = inp.config.mode === 'team' && handle !== inp.me;
+    if (agentFrac > 0 || (teammate && zoneShare > 0)) {
+      evidence.push({ kind: 'agent-share', text: `about ${pct(zoneShare)} of this zone was written by agents` });
     }
     const authorship = zone.loc > 0 ? Math.min(HUMAN_SHARE_MAX, (HUMAN_SHARE_MULT * lines) / zone.loc) : 0;
     const raw = Math.max(0, HUMAN_BASE + authorship - AGENT_PENALTY * agentFrac);
