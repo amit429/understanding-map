@@ -1,9 +1,10 @@
 import { execFileSync } from 'node:child_process';
-import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { machineId } from '../src/attribution';
 import { main } from '../src/cli';
+import { appendPass } from '../src/events';
 import { runSetup } from '../src/setup';
 import { buildMap } from '../src/pipeline';
 import { emptyHome, fixture } from './helpers/fixture';
@@ -96,6 +97,25 @@ describe('runSetup', () => {
   });
 });
 
+describe('map in a clone that has team config but no ignore file', () => {
+  it('writes the team ignore form so events/ stay shareable', async () => {
+    const root = fixture();
+    mkdirSync(join(root, '.understanding'), { recursive: true });
+    writeFileSync(join(root, '.understanding/config.json'), JSON.stringify({ mode: 'team' }));
+    await run(root, ['map', '--no-report']);
+    expect(read(root, '.understanding/.gitignore')).toBe('local/\nreport.html\n');
+    appendPass(root, 'dev', { zone: 'z', level: 3, fingerprint: {}, date: '2026-01-01', kind: 'session' });
+    const status = git(root, 'status', '--porcelain', '--untracked-files=all');
+    expect(status).toContain('.understanding/events/dev.jsonl');
+  });
+
+  it('with no config the ignore file stays solo', async () => {
+    const root = fixture();
+    await run(root, ['map', '--no-report']);
+    expect(read(root, '.understanding/.gitignore')).toBe('*\n');
+  });
+});
+
 describe('cli setup', () => {
   it('rejects a missing or invalid mode with usage and exit 2', async () => {
     const root = fixture();
@@ -111,7 +131,7 @@ describe('cli setup', () => {
     const root = fixture();
     const r = await run(root, ['setup', '--mode', 'team', '--critical', 'src/**, lib/**']);
     expect(r.code).toBe(0);
-    expect(r.stdout).toContain('Commit .understanding/config.json, events/ and agent-share/ with your normal commits — only passes and anonymous zone totals are shared.');
+    expect(r.stdout).toContain('Commit .understanding/config.json, .understanding/.gitignore, events/ and agent-share/ with your normal commits — only passes and anonymous zone totals are shared.');
     expect(JSON.parse(read(root, '.understanding/config.json'))).toMatchObject({ mode: 'team', critical: ['src/**', 'lib/**'] });
     const s = JSON.parse((await run(root, ['status', '--json'])).stdout);
     expect(s).toMatchObject({ setUp: true, mode: 'team' });

@@ -88,7 +88,7 @@ export const commands: Record<string, Command> = {
         : 'Local data and the HTML report are ignored by git; passes and anonymous zone totals can be shared.',
     ];
     if (r.gitattributesLines.length) lines.push(`Added ${r.gitattributesLines.length} merge rule(s) to .gitattributes so shared files merge cleanly.`);
-    if (mode === 'team') lines.push('Commit .understanding/config.json, events/ and agent-share/ with your normal commits — only passes and anonymous zone totals are shared.');
+    if (mode === 'team') lines.push('Commit .understanding/config.json, .understanding/.gitignore, events/ and agent-share/ with your normal commits — only passes and anonymous zone totals are shared.');
     out(lines.join('\n'));
     return 0;
   }),

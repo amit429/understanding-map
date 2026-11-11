@@ -1,7 +1,7 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { machineId } from './attribution.js';
-import { umDir } from './config.js';
+import { SOLO_IGNORE, TEAM_IGNORE, umDir } from './config.js';
 import type { Config } from './types.js';
 
 const TEAM_ATTRIBUTES = [
@@ -27,8 +27,9 @@ export function runSetup(
   }
   writeFileSync(configPath, JSON.stringify({ ...existing, mode: opts.mode, critical: opts.critical }, null, 2) + '\n');
 
-  const gitignoreLines = opts.mode === 'team' ? ['local/', 'report.html'] : ['*'];
-  writeFileSync(join(dir, '.gitignore'), gitignoreLines.join('\n') + '\n');
+  const ignore = opts.mode === 'team' ? TEAM_IGNORE : SOLO_IGNORE;
+  const gitignoreLines = ignore.trimEnd().split('\n');
+  writeFileSync(join(dir, '.gitignore'), ignore);
 
   const gitattributesLines: string[] = [];
   if (opts.mode === 'team') {

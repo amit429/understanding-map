@@ -83,10 +83,15 @@ export function loadConfig(root: string): Config {
   return { ...d, ...rest, handoff: { ...d.handoff, ...(handoff ?? {}) } };
 }
 
-/** Keeps .understanding/ out of git by default: writes `*` to its own .gitignore unless one already exists. */
+export const SOLO_IGNORE = '*\n';
+export const TEAM_IGNORE = 'local/\nreport.html\n';
+
+/** Keeps .understanding/ out of git by default: writes its own .gitignore (team form if the config says team) unless one already exists. */
 export function ensureUnderstandingIgnore(root: string): void {
   const file = join(umDir(root), '.gitignore');
   if (existsSync(file)) return;
+  let team = false;
+  try { team = loadConfig(root).mode === 'team'; } catch { /* unreadable config counts as solo */ }
   mkdirSync(umDir(root), { recursive: true });
-  writeFileSync(file, '*\n');
+  writeFileSync(file, team ? TEAM_IGNORE : SOLO_IGNORE);
 }
