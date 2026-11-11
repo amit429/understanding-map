@@ -78,6 +78,14 @@ describe('solo mode', () => {
       for (const p of z.people) expect(Number.isFinite(p.level)).toBe(true);
     }
   });
+
+  it('counts me for the state even when I am inactive (R11)', () => {
+    const z = result(inputs({ zones: [core], commits: [mkCommit('c1', 'me', 120, [['core/a.ts', 500]])] }), 'core');
+    const me = person(z.people, 'me');
+    expect(me.active).toBe(false);
+    expect(Math.abs(me.level - 44)).toBeLessThanOrEqual(1);
+    expect(z.state).toBe('fading');
+  });
 });
 
 describe('team mode', () => {
@@ -135,6 +143,14 @@ describe('team mode', () => {
     expect(z.agentShare).toBeCloseTo(0.1);
     expect(person(z.people, 'bo').evidence.some((e) => e.kind === 'agent-share')).toBe(false);
   });
+
+  it("uses a teammate's own known agent lines (e.g. trailers) even without a shared share (R12)", () => {
+    const inp = inputs({
+      config: team, zones: [core], commits: [mkCommit('c1', 'bo', 1, [['core/a.ts', 500]])],
+      agentLines: new Map([['c1', new Map([['core/a.ts', 500]])]]),
+    });
+    expect(Math.abs(person(personLevels(core, inp), 'bo').level - 20)).toBeLessThanOrEqual(1);
+  });
 });
 
 describe('passes and partials', () => {
@@ -149,6 +165,14 @@ describe('passes and partials', () => {
     const me = person(personLevels(changed, inp2), 'me');
     expect(me.level).toBe(40);
     expect(me.evidence.map((e) => e.kind)).toEqual(['pass', 'decay-change']);
+  });
+
+  it('weights changed files by lines when fileLoc is given (R10)', () => {
+    const w = mkZone('w', ['w/a.ts', 'w/b.ts'], 1000);
+    const ev = pass(w, 80, 0, { 'w/a.ts': 'old-hash', 'w/b.ts': w.fingerprint['w/b.ts'] });
+    const base = { zones: [w], passes: new Map([['me', [ev]]]) };
+    expect(person(personLevels(w, inputs({ ...base, fileLoc: { 'w/a.ts': 900, 'w/b.ts': 100 } })), 'me').level).toBe(8);
+    expect(person(personLevels(w, inputs(base)), 'me').level).toBe(40);
   });
 
   it('8. a local partial applies only to me', () => {

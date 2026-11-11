@@ -12,6 +12,7 @@ export interface ScoreInputs {
   zones: Zone[]; commits: Commit[];
   agentLines: Map<string, Map<string, number>>;   // local knowledge (Task 5)
   sharedAgentShare: Record<string, number>;        // zone → 0..1, team mode only (pipeline computes it)
+  fileLoc?: Record<string, number>;                // path → lines of code; weights pass fingerprint decay by lines
   passes: Map<string, PassEvent[]>; localPartials: PassEvent[];
   fanIn: Record<string, number>; reviews: Record<string, Record<string, number>>; flags: Record<string, Flag[]>;
 }
@@ -89,11 +90,15 @@ function zoneAgentShare(zone: Zone, touches: Touch[], inp: ScoreInputs): number 
   return Math.max(share(local), share(inp.sharedAgentShare[zone.id]));
 }
 
-/** My own fraction, or anyone's in solo mode, comes from local knowledge; teammates get the zone's shared share. */
+/**
+ * Everyone starts from their own agent lines (local knowledge, incl. public trailers/notes) ÷ their added lines.
+ * In team mode, teammates (not `me`) also take the zone's shared share if it is higher.
+ */
 function personAgentFrac(handle: string, zone: Zone, mine: Touch[], inp: ScoreInputs): number {
-  if (inp.config.mode === 'team' && handle !== inp.me) return share(inp.sharedAgentShare[zone.id]);
   const added = sum(mine.map((t) => t.added));
-  return added > 0 ? share(sum(mine.map((t) => t.agent)) / added) : 0;
+  const own = added > 0 ? share(sum(mine.map((t) => t.agent)) / added) : 0;
+  if (inp.config.mode === 'team' && handle !== inp.me) return Math.max(own, share(inp.sharedAgentShare[zone.id]));
+  return own;
 }
 
 /**
@@ -137,10 +142,13 @@ function historyLevel(handle: string, zone: Zone, touches: Touch[], inp: ScoreIn
 
 /** Event level × share of the zone's files whose hash is unchanged since the event × time decay. */
 function passLevel(ev: PassEvent, zone: Zone, inp: ScoreInputs, kind: 'pass' | 'partial'): Scored {
-  // Zones carry no per-file line counts, so "share of the zone" is measured by files.
+  // Weighted by lines of code when `fileLoc` is given (and non-empty for this zone), else by file count.
   const fp: Record<string, unknown> = typeof ev.fingerprint === 'object' && ev.fingerprint !== null ? ev.fingerprint : {};
-  const same = zone.files.filter((f) => fp[f] === zone.fingerprint[f]).length;
-  const unchanged = zone.files.length ? same / zone.files.length : 0;
+  const byLines = inp.fileLoc !== undefined && zone.files.some((f) => num(inp.fileLoc?.[f]) > 0);
+  const weight = (f: string) => (byLines ? Math.max(0, num(inp.fileLoc?.[f])) : 1);
+  const total = sum(zone.files.map(weight));
+  const same = sum(zone.files.filter((f) => fp[f] === zone.fingerprint[f]).map(weight));
+  const unchanged = total > 0 ? same / total : 0;
   const days = daysSince(inp.now, Date.parse(ev.date));
   const faded = timeDecay(days, inp.config.halfLifeDays);
   const what = ev.kind === 'handoff' ? 'a handoff check' : 'a learning session';
@@ -194,10 +202,13 @@ export function personLevels(zone: Zone, inp: ScoreInputs): PersonLevel[] {
 
 // ---- zone state ------------------------------------------------------------
 
-/** Inactive people never count toward Owned, Fragile or Fading. Solo mode counts only `me`. */
+/**
+ * Solo mode counts only `me`, active or not ("active" is a team bus-factor concept).
+ * In team mode inactive people never count toward Owned, Fragile or Fading.
+ */
 export function zoneState(people: PersonLevel[], agentShare: number, hasEvidence: boolean, inp: ScoreInputs): ZoneState {
   const { threshold, fadingFloor, mode } = inp.config;
-  const active = people.filter((p) => p.active && (mode === 'team' || p.handle === inp.me));
+  const active = people.filter((p) => (mode === 'team' ? p.active : p.handle === inp.me));
   const above = active.filter((p) => p.level >= threshold).length;
   if (mode === 'solo') {
     if (above) return 'owned';
