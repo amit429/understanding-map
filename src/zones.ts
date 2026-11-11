@@ -68,32 +68,23 @@ function chunk(files: FileEntry[]): FileEntry[][] {
   return chunks;
 }
 
-function splitDir(dir: string, files: FileEntry[], out: Draft[]): void {
-  if (sumLoc(files) <= SPLIT_ABOVE) {
-    out.push({ id: idForDir(dir), dir, override: false, files });
-    return;
-  }
-  const direct: FileEntry[] = [];
-  const children = new Map<string, FileEntry[]>();
+function zoneDirectories(files: FileEntry[]): Draft[] {
+  const byDir = new Map<string, FileEntry[]>();
   for (const f of files) {
-    const rest = dir ? f.path.slice(dir.length + 1) : f.path;
-    const slash = rest.indexOf('/');
-    if (slash === -1) {
-      direct.push(f);
-    } else {
-      const child = dir ? `${dir}/${rest.slice(0, slash)}` : rest.slice(0, slash);
-      (children.get(child) ?? children.set(child, []).get(child)!).push(f);
-    }
+    const dir = dirOf(f.path);
+    (byDir.get(dir) ?? byDir.set(dir, []).get(dir)!).push(f);
   }
-  for (const [child, cf] of children) splitDir(child, cf, out);
-  if (!direct.length) return;
-  if (sumLoc(direct) <= SPLIT_ABOVE) {
-    out.push({ id: idForDir(dir), dir, override: false, files: direct });
-  } else {
+  const out: Draft[] = [];
+  for (const [dir, direct] of byDir) {
+    if (sumLoc(direct) <= SPLIT_ABOVE) {
+      out.push({ id: idForDir(dir), dir, override: false, files: direct });
+      continue;
+    }
     const chunks = chunk(direct);
     chunks.forEach((c, i) =>
       out.push({ id: chunks.length === 1 ? idForDir(dir) : `${idForDir(dir)}#${i + 1}`, dir, override: false, files: c }));
   }
+  return out;
 }
 
 function mergeSmall(drafts: Draft[]): Draft[] {
@@ -125,8 +116,7 @@ export function buildZones(files: FileEntry[], config: Config): Zone[] {
   }
 
   const rest = files.filter((f) => !claimed.has(f.path));
-  const dirZones: Draft[] = [];
-  splitDir('', rest.sort(byPath), dirZones);
+  const dirZones = zoneDirectories(rest.sort(byPath));
 
   return [...drafts, ...mergeSmall(dirZones)]
     .map((d) => {

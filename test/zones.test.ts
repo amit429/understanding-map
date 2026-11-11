@@ -82,8 +82,19 @@ describe('buildZones', () => {
     expect(zones.find((z) => z.id === 'src')!.files).toEqual(['src/index.ts', 'src/tiny/t.ts']);
   });
 
-  it('keeps a small repo as a single zone', () => {
-    expect(buildZones([fe('a.ts', 500), fe('src/b.ts', 500)], cfg()).map((z) => z.id)).toEqual(['(root)']);
+  it('makes one zone per directory even in a small repo', () => {
+    const zones = buildZones([fe('src/api/a.ts', 400), fe('src/db/b.ts', 300)], cfg());
+    expect(zones.map((z) => z.id)).toEqual(['src/api', 'src/db']);
+  });
+
+  it('keeps a directory and its subdirectory as separate zones', () => {
+    const zones = buildZones([fe('a.ts', 500), fe('src/b.ts', 500)], cfg());
+    expect(zones.map((z) => z.id)).toEqual(['(root)', 'src']);
+  });
+
+  it('cascades merges upward when the created parent is also small', () => {
+    const zones = buildZones([fe('src/tiny/t.ts', 100), fe('lib/x.ts', 500)], cfg());
+    expect(zones.map((z) => z.id)).toEqual(['(root)', 'lib']);
   });
 
   it('creates the parent zone when it has no files of its own', () => {
@@ -103,8 +114,8 @@ describe('buildZones', () => {
     const pay = zones.find((z) => z.id === 'payments')!;
     expect(pay.files).toEqual(['src/billing/stripe.ts', 'src/pay/a.ts']);
     expect(pay.loc).toBe(700);
-    expect(zones.find((z) => z.id === 'src')!.files).toEqual(['src/billing/other.ts']);
-    expect(zones.map((z) => z.id)).toEqual(['lib', 'payments', 'src']);
+    expect(zones.find((z) => z.id === 'src/billing')!.files).toEqual(['src/billing/other.ts']);
+    expect(zones.map((z) => z.id)).toEqual(['lib', 'payments', 'src/billing']);
   });
 
   it('never merges an override zone, even when small', () => {
