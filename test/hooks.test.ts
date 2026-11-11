@@ -79,6 +79,31 @@ describe('onPostToolUse', () => {
   });
 });
 
+describe('onPostToolUse hunks with context', () => {
+  const patchInput = (root: string, hunk: object) => ({
+    session_id: 's', cwd: root, tool_name: 'Edit', tool_input: { file_path: join(root, 'src/a.ts') },
+    tool_response: { structuredPatch: [hunk] },
+  });
+
+  it('counts only added lines of a hunk with context', () => {
+    const root = setUpRepo();
+    onPostToolUse(patchInput(root, { newStart: 10, newLines: 7, lines: [' a', ' b', ' c', '-x', '+y', ' d', ' e', ' f'] }));
+    expect(readEdits(root)[0]).toMatchObject({ lines: 1, ranges: [[13, 13]] });
+  });
+
+  it('yields one range per separate added run', () => {
+    const root = setUpRepo();
+    onPostToolUse(patchInput(root, { newStart: 5, newLines: 8, lines: [' a', '+b', '+c', ' d', '-e', '+f', ' g'] }));
+    expect(readEdits(root)[0]).toMatchObject({ lines: 3, ranges: [[6, 7], [9, 9]] });
+  });
+
+  it('falls back to newStart/newLines when the hunk has no lines array', () => {
+    const root = setUpRepo();
+    onPostToolUse(patchInput(root, { newStart: 3, newLines: 2 }));
+    expect(readEdits(root)[0]).toMatchObject({ lines: 2, ranges: [[3, 4]] });
+  });
+});
+
 describe('onStop', () => {
   it('nudges at the threshold, not again without new edits, and again after 50 more', () => {
     const root = setUpRepo();

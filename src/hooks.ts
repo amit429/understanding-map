@@ -37,9 +37,33 @@ function rangesOf(response: unknown, input: Record<string, unknown>, tool: unkno
     const ranges: Array<[number, number]> = [];
     let lines = 0;
     for (const h of patch) {
-      if (!isObj(h) || typeof h.newStart !== 'number' || typeof h.newLines !== 'number' || h.newLines <= 0) continue;
-      ranges.push([h.newStart, h.newStart + h.newLines - 1]);
-      lines += h.newLines;
+      if (!isObj(h) || typeof h.newStart !== 'number') continue;
+      if (Array.isArray(h.lines)) {
+        // hunks carry context lines: count only '+' entries, as runs of new-file line numbers
+        let n = h.newStart;
+        let runStart = -1;
+        const close = () => {
+          if (runStart >= 0) ranges.push([runStart, n - 1]);
+          runStart = -1;
+        };
+        for (const l of h.lines) {
+          const c = typeof l === 'string' ? l[0] : '';
+          if (c === '+') {
+            if (runStart < 0) runStart = n;
+            n++;
+            lines++;
+          } else if (c === '-') {
+            close();
+          } else {
+            close();
+            n++;
+          }
+        }
+        close();
+      } else if (typeof h.newLines === 'number' && h.newLines > 0) {
+        ranges.push([h.newStart, h.newStart + h.newLines - 1]);
+        lines += h.newLines;
+      }
     }
     if (ranges.length > 0) return { ranges, lines };
   }
