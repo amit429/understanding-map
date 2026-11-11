@@ -114,3 +114,43 @@ describe('cli', () => {
     expect(r.stderr.trim().split('\n')).toHaveLength(1);
   });
 });
+
+describe('cli record and handoff', () => {
+  it('record --json prints result and changes; text form shows the transition', async () => {
+    const root = fixture();
+    const j = await run(root, ['record', '--kind', 'session', '--zones', 'agent', '--grades', 'pass,pass', '--json']);
+    expect(j.code).toBe(0);
+    expect(JSON.parse(j.stdout)).toMatchObject({ result: 'pass', changes: [{ zone: 'agent', before: 'dark', after: 'owned' }] });
+    const t = await run(root, ['record', '--kind', 'session', '--zones', 'human', '--grades', 'pass']);
+    expect(t.stdout).toMatch(/^human: \w+ → Owned \(level \d+ → 80\)/);
+  });
+
+  it('rejects bad input with exit 2', async () => {
+    const root = fixture();
+    expect((await run(root, ['record', '--kind', 'session', '--zones', 'agent', '--grades', 'great'])).code).toBe(2);
+    expect((await run(root, ['record', '--kind', 'session', '--zones', 'agent', '--grades', 'pass,pass,pass,pass'])).code).toBe(2);
+    const u = await run(root, ['record', '--kind', 'session', '--zones', 'nope', '--grades', 'pass']);
+    expect(u.code).toBe(2);
+    expect(u.stderr).toContain('Unknown zone');
+    const h = await run(root, ['record', '--kind', 'handoff', '--grades', 'pass']);
+    expect(h.code).toBe(2);
+    expect(h.stderr).toContain('Nothing to check — no agent changes since the last check.');
+  });
+
+  it('handoff-set, handoff-skip and unverifiable work end to end', async () => {
+    const root = fixture();
+    await run(root, ['map', '--no-report']);
+    const { appendEdit } = await import('../src/editlog');
+    appendEdit(root, { file: 'agent/a.ts', ranges: [], lines: 70, session: 's', ts: '2026-11-01T00:00:00.000Z' });
+    const s = await run(root, ['handoff-set', '--json']);
+    expect(JSON.parse(s.stdout)).toMatchObject({ totalLines: 70, zones: [{ zone: 'agent' }] });
+    const k = await run(root, ['handoff-skip']);
+    expect(k.code).toBe(0);
+    expect(JSON.parse((await run(root, ['handoff-set', '--json'])).stdout).zones).toEqual([]);
+    const u = await run(root, ['unverifiable', '--zone', 'human']);
+    expect(u.stdout).toContain('human');
+    expect(JSON.parse(readFileSync(join(root, '.understanding', 'local', 'flags.json'), 'utf8'))).toEqual({
+      agent: ['unreviewed-agent-code'], human: ['hard-to-verify'],
+    });
+  });
+});

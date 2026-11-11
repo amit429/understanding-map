@@ -1,0 +1,119 @@
+import { existsSync, readFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { describe, expect, it } from 'vitest';
+import { appendEdit, uncheckedEdits } from '../src/editlog';
+import { readFlags } from '../src/events';
+import { buildMap } from '../src/pipeline';
+import { gradeSession, handoffSet, markUnverifiable, recordResult, skipHandoff } from '../src/record';
+import { daysAgo, emptyHome, fixture, NOW } from './helpers/fixture';
+
+const lines = (p: string) => (existsSync(p) ? readFileSync(p, 'utf8').trim().split('\n').map((l) => JSON.parse(l)) : []);
+const um = (root: string, ...p: string[]) => join(root, '.understanding', ...p);
+const setup = () => ({ root: fixture(), home: emptyHome() });
+const edit = (root: string, file: string, n: number, ts: string) => appendEdit(root, { file, ranges: [], lines: n, session: 's', ts });
+
+describe('gradeSession', () => {
+  it.each([
+    [['pass', 'pass', 'partial'], 'pass'],
+    [['pass', 'pass', 'miss'], 'partial'],
+    [['pass', 'partial', 'miss'], 'partial'],
+    [['pass', 'pass'], 'pass'],
+    [['pass', 'miss'], 'partial'],
+    [['partial', 'partial'], 'partial'],
+    [['miss', 'miss', 'pass'], 'miss'],
+  ] as const)('%j -> %s', (g, want) => {
+    expect(gradeSession([...g])).toBe(want);
+  });
+});
+
+describe('recordResult session', () => {
+  it('a pass appends a PassEvent at level max(current, 80) with the current fingerprint', () => {
+    const { root, home } = setup();
+    const before = buildMap(root, { now: NOW, homeDir: home }).zones.find((z) => z.zone.id === 'agent')!;
+    const r = recordResult(root, { kind: 'session', zones: ['agent'], grades: ['pass', 'pass'], now: NOW, homeDir: home });
+    expect(r.result).toBe('pass');
+    const [ev] = lines(um(root, 'events', 'dev.jsonl'));
+    expect(ev).toMatchObject({ zone: 'agent', level: 80, kind: 'session', date: NOW.toISOString(), fingerprint: before.zone.fingerprint });
+    expect(r.changes[0]).toMatchObject({ zone: 'agent', before: 'dark', after: 'owned', levelAfter: 80 });
+  });
+
+  it('a partial writes only local/partials.jsonl and an attempt, never events/', () => {
+    const { root, home } = setup();
+    const r = recordResult(root, { kind: 'session', zones: ['agent'], grades: ['partial', 'partial'], now: NOW, homeDir: home });
+    expect(r.result).toBe('partial');
+    expect(existsSync(um(root, 'events'))).toBe(false);
+    expect(lines(um(root, 'local', 'partials.jsonl'))[0]).toMatchObject({ zone: 'agent', level: 50 });
+    expect(lines(um(root, 'local', 'attempts.jsonl'))[0]).toMatchObject({ zone: 'agent', result: 'partial' });
+  });
+
+  it('a miss writes an attempt with retryAfter 3 days later and nothing else', () => {
+    const { root, home } = setup();
+    recordResult(root, { kind: 'session', zones: ['agent'], grades: ['miss'], now: NOW, homeDir: home });
+    const [a] = lines(um(root, 'local', 'attempts.jsonl'));
+    expect(a).toMatchObject({ zone: 'agent', kind: 'session', result: 'miss', retryAfter: new Date(NOW.getTime() + 3 * 86_400_000).toISOString() });
+    expect(existsSync(um(root, 'events'))).toBe(false);
+    expect(existsSync(um(root, 'local', 'partials.jsonl'))).toBe(false);
+  });
+
+  it('a partial never lowers a level above 50', () => {
+    const { root, home } = setup();
+    recordResult(root, { kind: 'session', zones: ['human'], grades: ['pass'], now: NOW, homeDir: home });
+    const r = recordResult(root, { kind: 'session', zones: ['human'], grades: ['partial'], now: NOW, homeDir: home });
+    expect(r.changes[0].levelAfter).toBeGreaterThanOrEqual(r.changes[0].levelBefore);
+  });
+});
+
+describe('handoff', () => {
+  it('groups unchecked edits by zone (cache, then directory fallback), sorted by lines', () => {
+    const { root, home } = setup();
+    buildMap(root, { now: NOW, homeDir: home });
+    edit(root, 'agent/a.ts', 30, daysAgo(2));
+    edit(root, 'human/h.ts', 80, daysAgo(1));
+    edit(root, 'brand/new/x.ts', 10, daysAgo(1));
+    edit(root, 'top.ts', 5, daysAgo(1));
+    const s = handoffSet(root);
+    expect(s.totalLines).toBe(125);
+    expect(s.zones.map((z) => z.zone)).toEqual(['human', 'agent', 'brand/new', '(root)']);
+    expect(s.zones[0]).toEqual({ zone: 'human', lines: 80, files: ['human/h.ts'] });
+    expect(s.edits).toHaveLength(4);
+  });
+
+  it('a pass appends handoff passes at max(current, 65) and empties the set', () => {
+    const { root, home } = setup();
+    buildMap(root, { now: NOW, homeDir: home });
+    edit(root, 'agent/a.ts', 60, daysAgo(1));
+    const r = recordResult(root, { kind: 'handoff', zones: [], grades: ['pass', 'pass'], now: NOW, homeDir: home });
+    expect(r.result).toBe('pass');
+    expect(lines(um(root, 'events', 'dev.jsonl'))[0]).toMatchObject({ zone: 'agent', level: 65, kind: 'handoff' });
+    expect(uncheckedEdits(root)).toEqual([]);
+  });
+
+  it('a miss flags touched zones and empties the set; a partial only empties it', () => {
+    const { root, home } = setup();
+    buildMap(root, { now: NOW, homeDir: home });
+    edit(root, 'agent/a.ts', 60, daysAgo(1));
+    recordResult(root, { kind: 'handoff', zones: [], grades: ['partial'], now: NOW, homeDir: home });
+    expect(readFlags(root)).toEqual({});
+    expect(uncheckedEdits(root)).toEqual([]);
+    edit(root, 'agent/a.ts', 60, daysAgo(0.5));
+    recordResult(root, { kind: 'handoff', zones: [], grades: ['miss'], now: NOW, homeDir: home });
+    expect(readFlags(root)).toEqual({ agent: ['unreviewed-agent-code'] });
+    expect(uncheckedEdits(root)).toEqual([]);
+    expect(existsSync(um(root, 'events'))).toBe(false);
+  });
+
+  it('skipHandoff flags touched zones and empties the set', () => {
+    const { root, home } = setup();
+    buildMap(root, { now: NOW, homeDir: home });
+    edit(root, 'human/h.ts', 60, daysAgo(1));
+    skipHandoff(root, NOW);
+    expect(readFlags(root)).toEqual({ human: ['unreviewed-agent-code'] });
+    expect(handoffSet(root).zones).toEqual([]);
+  });
+
+  it('markUnverifiable adds hard-to-verify', () => {
+    const { root } = setup();
+    markUnverifiable(root, 'agent');
+    expect(readFlags(root)).toEqual({ agent: ['hard-to-verify'] });
+  });
+});

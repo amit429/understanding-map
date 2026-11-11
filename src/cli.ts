@@ -5,6 +5,7 @@ import { ensureUnderstandingIgnore, isSetUp, loadConfig } from './config.js';
 import { repoRootOf } from './git.js';
 import { buildMap } from './pipeline.js';
 import { renderReport, writeReport } from './report.js';
+import { handoffSet, markUnverifiable, recordResult, skipHandoff, type Grade } from './record.js';
 import { runSetup } from './setup.js';
 import { formatSummary, formatWho } from './terminal.js';
 import type { MapResult, ZoneResult } from './types.js';
@@ -58,6 +59,13 @@ function findZone(m: MapResult, root: string, target: string): ZoneResult | null
   const dir = path.replace(/\/+$/, '') + '/';
   return m.zones.find((z) => z.zone.files.some((f) => f.startsWith(dir))) ?? null;
 }
+
+const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
+const GRADES = ['pass', 'partial', 'miss'];
+const valueOf = (args: string[], flag: string): string | undefined => {
+  const i = args.indexOf(flag);
+  return i >= 0 ? args[i + 1] : undefined;
+};
 
 export const commands: Record<string, Command> = {
   status: guarded((root, args) => {
@@ -144,6 +152,60 @@ export const commands: Record<string, Command> = {
       return 1;
     }
     out(formatWho(z, m.mode, { threshold: loadConfig(root).threshold, me: m.me }));
+    return 0;
+  }),
+
+  record: guarded((root, args) => {
+    const kind = valueOf(args, '--kind');
+    const grades = (valueOf(args, '--grades') ?? '').split(',').map((g) => g.trim()).filter(Boolean);
+    const zones = (valueOf(args, '--zones') ?? '').split(',').map((z) => z.trim()).filter(Boolean);
+    if ((kind !== 'session' && kind !== 'handoff') || grades.length < 1 || grades.length > 3 || !grades.every((g) => GRADES.includes(g))
+      || (kind === 'session' && zones.length === 0)) {
+      err('Usage: record --kind session|handoff [--zones <id,id>] --grades pass|partial|miss[,...] (1-3 grades; --zones required for session) [--json]');
+      return 2;
+    }
+    if (kind === 'handoff' && handoffSet(root).zones.length === 0) {
+      err('Nothing to check — no agent changes since the last check.');
+      return 2;
+    }
+    if (kind === 'session') {
+      const known = new Set(buildMap(root).zones.map((z) => z.zone.id));
+      const bad = zones.filter((z) => !known.has(z));
+      if (bad.length) {
+        err(`Unknown zone: ${bad.join(', ')}. Run map to see zone ids.`);
+        return 2;
+      }
+    }
+    const r = recordResult(root, { kind, zones, grades: grades as Grade[] });
+    if (parseArgs(args).flags.has('--json')) out(JSON.stringify(r));
+    else out(r.changes.map((c) => `${c.zone}: ${cap(c.before)} → ${cap(c.after)} (level ${c.levelBefore} → ${c.levelAfter})`).join('\n') || `Result: ${r.result}`);
+    return 0;
+  }),
+
+  unverifiable: guarded((root, args) => {
+    const zone = valueOf(args, '--zone');
+    if (!zone) {
+      err('Usage: unverifiable --zone <id>');
+      return 2;
+    }
+    markUnverifiable(root, zone);
+    out(`Marked ${zone} as hard to verify.`);
+    return 0;
+  }),
+
+  'handoff-set': guarded((root, args) => {
+    const s = handoffSet(root);
+    out(parseArgs(args).flags.has('--json')
+      ? JSON.stringify(s)
+      : s.zones.length
+        ? `${s.totalLines} agent-written lines across ${s.zones.length} zone(s): ${s.zones.map((z) => `${z.zone} (${z.lines})`).join(', ')}`
+        : 'Nothing to check — no agent changes since the last check.');
+    return 0;
+  }),
+
+  'handoff-skip': guarded((root) => {
+    skipHandoff(root);
+    out('Skipped the handoff check; touched zones are flagged as unreviewed agent code.');
     return 0;
   }),
 
