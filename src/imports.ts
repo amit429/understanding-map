@@ -96,7 +96,28 @@ function fileBySuffix(rel: string, exts: string[], files: Set<string>): string |
 const firstIn = (cands: string[], files: Set<string>) => cands.find((c) => files.has(c)) ?? null;
 const TS_EXTS = ['.ts', '.tsx', '.mts', '.cts', '.js', '.jsx', '.mjs', '.cjs'];
 
-export function resolveImport(from: string, spec: string, lang: Lang, files: Set<string>): string | null {
+/** Go module paths keyed by the directory holding their go.mod ('' for the repo root). */
+export type GoModules = Map<string, string>;
+
+function resolveGo(from: string, spec: string, files: Set<string>, modules: GoModules): string | null {
+  let modDir: string | null = null;
+  for (let d = dirOf(from); modDir === null; d = dirOf(d)) {
+    if (modules.has(d)) modDir = d;
+    if (!d) break;
+  }
+  if (modDir !== null) {
+    const mod = modules.get(modDir)!;
+    if (spec !== mod && !spec.startsWith(`${mod}/`)) return null; // stdlib or third-party
+    const target = joinPath(modDir, spec.slice(mod.length + 1));
+    return indexOf(files).dirs.has(target) ? target : null;
+  }
+  const segs = spec.split('/').filter(Boolean);
+  return segs.length < 2 ? null : dirBySuffix(segs, files, 2);
+}
+
+export function resolveImport(
+  from: string, spec: string, lang: Lang, files: Set<string>, goModules: GoModules = new Map(),
+): string | null {
   const dir = dirOf(from);
   switch (lang) {
     case 'ts': {
@@ -125,8 +146,9 @@ export function resolveImport(from: string, spec: string, lang: Lang, files: Set
       }
     }
     case 'go':
+      return resolveGo(from, spec, files, goModules);
     case 'cs': {
-      const segs = spec.split(lang === 'go' ? '/' : '.').filter(Boolean);
+      const segs = spec.split('.').filter(Boolean);
       return dirBySuffix(segs, files, segs.length === 1 ? 1 : 2);
     }
     case 'java': {
@@ -194,6 +216,13 @@ export function fanInByZone(root: string, files: FileEntry[], zones: Zone[], com
     }
   }
 
+  const goModules: GoModules = new Map();
+  for (const p of known) {
+    if (posix.basename(p) !== 'go.mod') continue;
+    const m = readSource(root, p)?.match(/^\s*module\s+(\S+)/m);
+    if (m) goModules.set(dirOf(p), m[1].replace(/^"|"$/g, ''));
+  }
+
   const hasSupported = new Set<string>();
   for (const [path, zid] of zoneOf) {
     const lang = languageOf(path);
@@ -202,7 +231,7 @@ export function fanInByZone(root: string, files: FileEntry[], zones: Zone[], com
     const src = readSource(root, path);
     if (src === null) continue;
     for (const spec of extractImports(lang, src)) {
-      const target = resolveImport(path, spec, lang, known);
+      const target = resolveImport(path, spec, lang, known, goModules);
       if (!target) continue;
       const targets = known.has(target) ? [target] : [...(filesByDir.get(target) ?? [])];
       for (const t of targets) {

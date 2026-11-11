@@ -75,6 +75,30 @@ describe('go', () => {
   });
 });
 
+describe('go modules', () => {
+  const files = new Set(['internal/log/l.go', 'cmd/main.go', 'go.mod']);
+  const mods = new Map([['', 'github.com/x/proj']]);
+  it('resolves only imports under the module path', () => {
+    expect(resolveImport('cmd/main.go', 'log', 'go', files, mods)).toBeNull();
+    expect(resolveImport('cmd/main.go', 'github.com/x/proj/internal/log', 'go', files, mods)).toBe('internal/log');
+    expect(resolveImport('cmd/main.go', 'github.com/other/lib/internal/log', 'go', files, mods)).toBeNull();
+  });
+  it('never resolves a single segment without go.mod', () => {
+    expect(resolveImport('cmd/main.go', 'log', 'go', files)).toBeNull();
+  });
+  it('does not inflate fan-in for stdlib names', () => {
+    const root = tmp();
+    put(root, 'go.mod', 'module github.com/x/proj\n\ngo 1.21\n');
+    put(root, 'internal/log/l.go', 'package log');
+    put(root, 'cmd/main.go', 'import (\n  "log"\n  "github.com/x/proj/internal/log"\n)');
+    put(root, 'cmd/other.go', 'import "log"');
+    const paths = ['go.mod', 'internal/log/l.go', 'cmd/main.go', 'cmd/other.go'];
+    const zones = [zone('log', [paths[1]]), zone('cmd', paths.slice(2)), zone('(root)', [paths[0]])];
+    const r = fanInByZone(root, paths.map(fe), zones, []);
+    expect(r.log).toBe(1);
+  });
+});
+
 describe('other languages', () => {
   it('java, csharp, rust, ruby and php resolve', () => {
     const jf = new Set(['src/com/acme/Foo.java', 'src/com/acme/util/H.java']);
