@@ -1,4 +1,4 @@
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { Config } from './types.js';
 
@@ -81,4 +81,12 @@ export function loadConfig(root: string): Config {
   const d = structuredClone(DEFAULT_CONFIG);
   const { handoff, ...rest } = raw as Partial<Config>;
   return { ...d, ...rest, handoff: { ...d.handoff, ...(handoff ?? {}) } };
+}
+
+/** Keeps .understanding/ out of git by default: writes `*` to its own .gitignore unless one already exists. */
+export function ensureUnderstandingIgnore(root: string): void {
+  const file = join(umDir(root), '.gitignore');
+  if (existsSync(file)) return;
+  mkdirSync(umDir(root), { recursive: true });
+  writeFileSync(file, '*\n');
 }

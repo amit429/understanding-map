@@ -1,4 +1,5 @@
-import { existsSync, mkdtempSync, readFileSync, realpathSync, rmSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
+import { existsSync, mkdirSync, mkdtempSync, writeFileSync, readFileSync, realpathSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -54,6 +55,33 @@ describe('cli', () => {
     const t = await run(root, ['map']);
     expect(t.stdout).toContain(`Report: ${join(realpathSync(root), '.understanding', 'report.html')}`);
     expect(readFileSync(join(root, '.understanding', 'report.html'), 'utf8')).toContain('Scores are estimates');
+  });
+
+  it('a report write failure does not take map down', async () => {
+    const root = fixture();
+    mkdirSync(join(root, '.understanding', 'report.html'), { recursive: true });
+    const j = await run(root, ['map', '--json']);
+    expect(j.code).toBe(0);
+    expect(JSON.parse(j.stdout).zones.length).toBe(3);
+    expect(j.stderr).toContain('Could not write the HTML report');
+    const t = await run(root, ['map']);
+    expect(t.code).toBe(0);
+    expect(t.stdout).toContain('Understanding Map — 3 zones');
+    expect(t.stdout).not.toContain('Report:');
+    expect(t.stderr).toContain('Could not write the HTML report');
+  });
+
+  it('map keeps .understanding/ out of git and never overwrites an existing .gitignore', async () => {
+    const root = fixture();
+    await run(root, ['map']);
+    expect(readFileSync(join(root, '.understanding', '.gitignore'), 'utf8').trim()).toBe('*');
+    const status = execFileSync('git', ['status', '--porcelain'], { cwd: root, env: { ...process.env, GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_SYSTEM: '/dev/null' } }).toString();
+    expect(status).not.toContain('.understanding');
+    const other = fixture();
+    mkdirSync(join(other, '.understanding'), { recursive: true });
+    writeFileSync(join(other, '.understanding', '.gitignore'), 'local/\n');
+    await run(other, ['map']);
+    expect(readFileSync(join(other, '.understanding', '.gitignore'), 'utf8')).toBe('local/\n');
   });
 
   it('zone resolves a file path to its zone', async () => {

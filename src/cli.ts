@@ -1,7 +1,7 @@
 import { realpathSync } from 'node:fs';
 import { relative, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { isSetUp, loadConfig } from './config.js';
+import { ensureUnderstandingIgnore, isSetUp, loadConfig } from './config.js';
 import { repoRootOf } from './git.js';
 import { buildMap } from './pipeline.js';
 import { renderReport, writeReport } from './report.js';
@@ -68,9 +68,17 @@ export const commands: Record<string, Command> = {
   }),
 
   map: guarded((root, args) => {
+    ensureUnderstandingIgnore(root);
     const m = buildMap(root);
     const { flags } = parseArgs(args);
-    const reportPath = flags.has('--no-report') ? null : writeReport(root, renderReport(m, { threshold: loadConfig(root).threshold }));
+    let reportPath: string | null = null;
+    if (!flags.has('--no-report')) {
+      try {
+        reportPath = writeReport(root, renderReport(m, { threshold: loadConfig(root).threshold }));
+      } catch (e) {
+        err(`Could not write the HTML report: ${(e as Error).message.split('\n')[0]}`);
+      }
+    }
     if (flags.has('--json')) {
       out(JSON.stringify(m));
       return 0;
