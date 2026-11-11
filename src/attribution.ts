@@ -1,8 +1,8 @@
 import { randomBytes } from 'node:crypto';
-import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { appendFileSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join, relative, sep } from 'node:path';
 import { umDir } from './config.js';
-import { listAtRef, showAtRef } from './git.js';
+import { readJsonlUnion } from './jsonl-union.js';
 import type { AgentShareEntry, Commit, EditLogEntry, Zone } from './types.js';
 import { zoneIndex } from './zones.js';
 
@@ -161,41 +161,15 @@ export function syncAgentShare(
   writeFileSync(writtenPath, JSON.stringify(written));
 }
 
-function countDistinct(text: string): Map<string, number> {
-  const m = new Map<string, number>();
-  for (const line of text.split('\n')) if (line.trim()) m.set(line, (m.get(line) ?? 0) + 1);
-  return m;
-}
-
 /** Union of working-tree and default-ref share files. Per file name, each line keeps max(count) copies. */
 export function readAgentShares(root: string, defaultRef: string | null): AgentShareEntry[] {
-  const byName = new Map<string, Map<string, number>>();
-  const merge = (name: string, text: string) => {
-    const cur = byName.get(name) ?? byName.set(name, new Map()).get(name)!;
-    for (const [line, n] of countDistinct(text)) cur.set(line, Math.max(cur.get(line) ?? 0, n));
-  };
-  // Within one name, merge per source so counts are maxed, not summed.
-  if (existsSync(shareDir(root))) {
-    for (const n of readdirSync(shareDir(root)).filter((x) => x.endsWith('.jsonl')).sort()) {
-      try {
-        merge(n, readFileSync(join(shareDir(root), n), 'utf8'));
-      } catch { /* skip */ }
-    }
-  }
-  if (defaultRef) {
-    for (const p of listAtRef(root, defaultRef, '.understanding/agent-share')) {
-      if (!p.endsWith('.jsonl')) continue;
-      const t = showAtRef(root, defaultRef, p);
-      if (t !== null) merge(p.slice(p.lastIndexOf('/') + 1), t);
-    }
-  }
   const out: AgentShareEntry[] = [];
-  for (const lines of byName.values()) {
-    for (const [line, n] of lines) {
+  for (const lines of readJsonlUnion(root, '.understanding/agent-share', defaultRef).values()) {
+    for (const line of lines) {
       try {
         const v = JSON.parse(line) as AgentShareEntry;
         if (typeof v.zone !== 'string' || typeof v.agentLines !== 'number' || typeof v.week !== 'string') continue;
-        for (let k = 0; k < n; k++) out.push(v);
+        out.push(v);
       } catch { /* skip */ }
     }
   }
