@@ -1,0 +1,7 @@
+{"type":"assistant","timestamp":"2026-11-10T09:00:00.000Z","sessionId":"abc","message":{"content":[{"type":"tool_use","name":"Edit","input":{"file_path":"__ROOT__/src/a.ts","old_string":"a","new_string":"b\nc"}}]}}
+{"type":"assistant","timestamp":"2026-11-10T09:01:00.000Z","sessionId":"abc","message":{"content":[{"type":"tool_use","name":"Write","input":{"file_path":"__ROOT__/src/b.ts","content":"x\ny\nz"}}]}}
+{"type":"assistant","timestamp":"2026-11-10T09:02:00.000Z","sessionId":"abc","message":{"content":[{"type":"tool_use","name":"MultiEdit","input":{"file_path":"__ROOT__/src/c.ts","edits":[{"old_string":"a","new_string":"1\n2"},{"old_string":"b","new_string":"3"}]}}]}}
+{"type":"assistant","timestamp":"2026-11-10T09:03:00.000Z","sessionId":"abc","message":{"content":[{"type":"tool_use","name":"Edit","input":{"file_path":"/elsewhere/outside.ts","old_string":"a","new_string":"b"}}]}}
+{"type":"assistant","timestamp":"2026-11-10T09:04:00.000Z","sessionId":"abc","message":{"content":[{"type":"tool_use","name":"Read","input":{"file_path":"__ROOT__/src/a.ts"}}]}}
+{"type":"user","timestamp":"2026-11-10T09:05:00.000Z","message":{"content":"hello"}}
+this is not json
