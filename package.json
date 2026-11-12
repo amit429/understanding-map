@@ -1,6 +1,6 @@
 {
   "name": "understanding-map",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Claude Code plugin that maps which parts of your codebase you still understand.",
   "type": "module",
   "scripts": {

@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs';
 import { join, posix } from 'node:path';
 import type { Commit, FileEntry, Zone } from './types.js';
 import { zoneIndex } from './zones.js';
+import { aliasCandidates, loadTsPaths, type TsPaths } from './ts-paths.js';
 
 export type Lang = 'ts' | 'py' | 'go' | 'java' | 'rs' | 'rb' | 'php' | 'cs';
 
@@ -124,19 +125,28 @@ function resolveGo(from: string, spec: string, files: Set<string>, modules: GoMo
   return segs.length < 2 ? null : dirBySuffix(segs, files, 2);
 }
 
+/** A TS/JS module path as tsc would try it: as is, with each extension, with a JS extension swapped, as a folder index. */
+const tsModule = (base: string, files: Set<string>): string | null => {
+  const stem = base.replace(/\.(?:[cm]?js|jsx)$/, '');
+  return firstIn([
+    base, ...TS_EXTS.map((e) => base + e), ...TS_EXTS.map((e) => stem + e),
+    ...TS_EXTS.map((e) => `${base}/index${e}`),
+  ], files);
+};
+
 export function resolveImport(
-  from: string, spec: string, lang: Lang, files: Set<string>, goModules: GoModules = new Map(),
+  from: string, spec: string, lang: Lang, files: Set<string>, goModules: GoModules = new Map(), tsPaths: TsPaths = [],
 ): string | null {
   const dir = dirOf(from);
   switch (lang) {
     case 'ts': {
-      if (!spec.startsWith('.')) return null;
-      const base = joinPath(dir, spec);
-      const stem = base.replace(/\.(?:[cm]?js|jsx)$/, '');
-      return firstIn([
-        base, ...TS_EXTS.map((e) => base + e), ...TS_EXTS.map((e) => stem + e),
-        ...TS_EXTS.map((e) => `${base}/index${e}`),
-      ], files);
+      if (spec.startsWith('.')) return tsModule(joinPath(dir, spec), files);
+      // tsconfig/jsconfig aliases ("@/app/...", baseUrl imports); bare package names resolve to nothing.
+      for (const base of aliasCandidates(from, spec, tsPaths)) {
+        const hit = tsModule(base, files);
+        if (hit) return hit;
+      }
+      return null;
     }
     case 'py': {
       const dots = spec.match(/^\.*/)![0].length;
@@ -242,6 +252,8 @@ function scanEdges(root: string, known: Set<string>, from: Iterable<string> = kn
     if (m) goModules.set(dirOf(p), m[1].replace(/^"|"$/g, ''));
   }
 
+  const tsPaths = loadTsPaths(root, known);
+
   const edges: ImportEdge[] = [];
   const seen = new Set<string>();
   for (const path of from) {
@@ -250,7 +262,7 @@ function scanEdges(root: string, known: Set<string>, from: Iterable<string> = kn
     const src = readSource(root, path);
     if (src === null) continue;
     for (const { spec, index } of importMatches(lang, src)) {
-      const target = resolveImport(path, spec, lang, known, goModules);
+      const target = resolveImport(path, spec, lang, known, goModules, tsPaths);
       if (!target) continue;
       const line = lineAt(src, index);
       const targets = known.has(target) ? [target] : [...(filesByDir.get(target) ?? [])];

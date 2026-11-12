@@ -7,7 +7,7 @@
       "name": "understanding-map",
       "source": "./",
       "description": "Find the code nobody on your team understands any more and learn it back through short, verified sessions.",
-      "version": "0.2.0",
+      "version": "0.2.1",
       "category": "productivity",
       "tags": ["comprehension-debt", "learning", "code-understanding"]
     }
