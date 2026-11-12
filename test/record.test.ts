@@ -1,4 +1,4 @@
-import { existsSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { appendEdit, uncheckedEdits } from '../src/editlog';
@@ -177,6 +177,14 @@ describe('last learn session', () => {
     recordResult(root, { kind: 'session', zones: ['agent'], grades: [g1, g2], now: NOW, homeDir: home });
     expect(JSON.parse(readFileSync(um(root, 'local', 'last-learn.json'), 'utf8'))).toEqual({ zone: 'agent', date: NOW.toISOString() });
     expect(readLastLearn(root)).toEqual({ zone: 'agent', date: NOW.toISOString() });
+  });
+
+  it('a failure to write it never stops the session from being recorded', () => {
+    const { root, home } = setup();
+    mkdirSync(um(root, 'local', 'last-learn.json'), { recursive: true });
+    const r = recordResult(root, { kind: 'session', zones: ['agent'], grades: ['pass', 'pass'], now: NOW, homeDir: home });
+    expect(r.result).toBe('pass');
+    expect(lines(um(root, 'events', 'dev.jsonl'))).toHaveLength(1);
   });
 
   it('a handoff never writes it, and a malformed file reads as null', () => {

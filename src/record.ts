@@ -92,7 +92,6 @@ export function recordResult(
     }
     clearHandoff(root, handoff.edits);
   } else {
-    if (r.zones[0]) writeLastLearn(root, r.zones[0], date);
     for (const id of live) {
       const z = before.zones.find((x) => x.zone.id === id)!;
       const current = levelOf(before, id);
@@ -107,6 +106,10 @@ export function recordResult(
         appendAttempt(root, { zone: id, kind: 'session', result: 'miss', date, retryAfter: new Date(now.getTime() + 3 * DAY).toISOString() });
       }
     }
+  }
+
+  if (!handoff && r.zones[0]) {
+    try { writeLastLearn(root, r.zones[0], date); } catch { /* a convenience only: never fail the record over it */ }
   }
 
   const after = buildMap(root, opts);
