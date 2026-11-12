@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { umDir } from './config.js';
 import { refFiles, type Storyboard } from './storyboard.js';
@@ -73,20 +73,3 @@ export function checkFresh(root: string, zone: { id: string; files: string[] }, 
     : { fresh: true };
 }
 
-/** Zone id → page path (relative to `.understanding/`) for every zone whose saved visual is still fresh. */
-export function freshVisuals(root: string, zones: Array<{ id: string; files: string[] }>): Record<string, string> {
-  let names: string[];
-  try {
-    names = readdirSync(visualsDir(root)).filter((n) => n.endsWith('.json'));
-  } catch {
-    return {};
-  }
-  const bySlug = new Map(zones.map((z) => [`${visualSlug(z.id)}.json`, z]));
-  const out: Record<string, string> = {};
-  for (const name of names) {
-    const zone = bySlug.get(name);
-    const saved = zone && readSavedVisual(root, zone.id);
-    if (zone && saved && checkFresh(root, zone, saved).fresh) out[zone.id] = visualHref(zone.id);
-  }
-  return out;
-}

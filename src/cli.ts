@@ -10,9 +10,10 @@ import { ghAvailable, readReviewCache, reviewCountsByPath, type PathCounts } fro
 import { renderReport, writeReport } from './report.js';
 import { handoffSet, markUnverifiable, recordResult, skipHandoff, type Grade } from './record.js';
 import { runSetup } from './setup.js';
-import { mapLineCounter, StoryboardError } from './storyboard.js';
-import { checkStoryboard, renderVisual, type LiveZone } from './visual.js';
-import { checkFresh, freshVisuals, readSavedVisual, saveVisual, visualFingerprint } from './visual-store.js';
+import { StoryboardError } from './storyboard.js';
+import { checkStoryboard, renderVisual } from './visual.js';
+import { liveZone, refreshVisuals, rerender, reusableVisual, storyboardContextFor } from './visual-cache.js';
+import { saveVisual, visualFingerprint } from './visual-store.js';
 import { formatSummary, formatWho } from './terminal.js';
 import type { Config, MapResult, ZoneResult } from './types.js';
 
@@ -98,14 +99,6 @@ async function readStdin(): Promise<string> {
   return text;
 }
 
-const liveZone = (z: ZoneResult): LiveZone => ({ id: z.zone.id, state: z.state, reason: z.reason, fanIn: z.criticality.fanIn });
-const storyboardContext = (root: string, m: MapResult, zoneId: string) => ({
-  zone: zoneId,
-  zones: Object.fromEntries(m.zones.map((z) => [z.zone.id, z.zone.files])),
-  lineCount: mapLineCounter(root, m.zones.flatMap((z) => z.zone.files)),
-  people: [...new Set(m.zones.flatMap((z) => z.people.map((p) => p.handle)))],
-});
-
 export const commands: Record<string, Command> = {
   /** Hook entry point: not guarded; reads stdin, never throws, always exits 0. */
   hook: async (args) => {
@@ -166,7 +159,7 @@ export const commands: Record<string, Command> = {
     if (!flags.has('--no-report')) {
       try {
         let visuals: Record<string, string> = {};
-        try { visuals = freshVisuals(root, m.zones.map((z) => ({ id: z.zone.id, files: z.zone.files }))); } catch { /* no links */ }
+        try { visuals = refreshVisuals(root, m, new Date().toISOString().slice(0, 10)); } catch { /* no links */ }
         reportPath = writeReport(root, renderReport(m, { ...config, visuals }));
       } catch (e) {
         err(`Could not write the HTML report: ${(e as Error).message.split('\n')[0]}`);
@@ -329,21 +322,13 @@ export const commands: Record<string, Command> = {
     ensureUnderstandingIgnore(root);
 
     if (cached) {
-      const saved = readSavedVisual(root, z.zone.id);
-      let reason = saved ? '' : 'no saved animation for this zone yet';
-      if (saved) {
-        const fresh = checkFresh(root, { id: z.zone.id, files: z.zone.files }, saved);
-        if (!fresh.fresh) reason = fresh.reason;
-        else {
-          try { checkStoryboard(saved.storyboard, storyboardContext(root, m, z.zone.id)); } catch { reason = 'the saved storyboard no longer matches the map'; }
-        }
-      }
-      if (reason || !saved) {
-        out(json ? JSON.stringify({ cached: false, reason }) : `No reusable animation: ${reason}.`);
+      const r = reusableVisual(root, m, z);
+      if (!('saved' in r)) {
+        out(json ? JSON.stringify({ cached: false, reason: r.reason }) : `No reusable animation: ${r.reason}.`);
         return 0;
       }
-      const r = renderVisual(saved.storyboard, liveZone(z), date.slice(0, 10));
-      ready(saveVisual(root, saved, r.html).html, r.scenes, true);
+      const page = rerender(root, z, r.saved, date.slice(0, 10));
+      ready(page.path, page.scenes, true);
       return 0;
     }
 
@@ -358,7 +343,7 @@ export const commands: Record<string, Command> = {
     }
     let sb;
     try {
-      sb = checkStoryboard(raw, storyboardContext(root, m, z.zone.id));
+      sb = checkStoryboard(raw, storyboardContextFor(root, m, z.zone.id));
     } catch (e) {
       if (!(e instanceof StoryboardError)) throw e;
       err(`Invalid storyboard: ${e.message}`);

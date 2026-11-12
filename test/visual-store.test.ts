@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import type { Storyboard } from '../src/storyboard';
-import { checkFresh, freshVisuals, readSavedVisual, saveVisual, visualFingerprint, visualSlug } from '../src/visual-store';
+import { checkFresh, readSavedVisual, saveVisual, visualFingerprint, visualSlug } from '../src/visual-store';
 
 const h6 = (s: string) => createHash('sha1').update(s).digest('hex').slice(0, 6);
 
@@ -81,16 +81,6 @@ describe('visual fingerprint and cache', () => {
     expect(fresh().fresh).toBe(false);
     save();
     expect(checkFresh(root, { ...zone, files: [...zone.files, 'src/pay/c.ts'] }, readSavedVisual(root, zone.id)!).fresh).toBe(false);
-  });
-
-  it('freshVisuals maps each zone with a fresh saved visual to its page, relative to .understanding/', () => {
-    const root = repo(files);
-    saveVisual(root, { zone: zone.id, date: 'd', fingerprint: visualFingerprint(root, zone.files, sb()), storyboard: sb() }, '');
-    const zones = [zone, { id: 'web', files: ['web/page.ts'] }];
-    expect(freshVisuals(root, zones)).toEqual({ 'src/pay': `local/visuals/${visualSlug('src/pay')}.html` });
-    writeFileSync(join(root, 'src/pay/a.ts'), 'changed\n');
-    expect(freshVisuals(root, zones)).toEqual({});
-    expect(freshVisuals(repo({}), zones)).toEqual({});
   });
 
   it('reads a malformed saved file as null', () => {

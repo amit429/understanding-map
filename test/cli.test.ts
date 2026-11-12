@@ -357,6 +357,27 @@ describe('cli visualize', () => {
     expect(zone('src/payments').visual).toBeNull();
   });
 
+  it('map re-renders a linked animation with the live state first', async () => {
+    const { root, file } = await setup();
+    const made = JSON.parse((await run(root, ['visualize', 'src/payments', '--storyboard', file, '--json'])).stdout);
+    expect(readFileSync(made.path, 'utf8')).toContain('>Dark</tspan>');
+    await run(root, ['record', '--kind', 'session', '--zones', 'src/payments', '--grades', 'pass,pass']);
+    await run(root, ['map']);
+    expect(readFileSync(made.path, 'utf8')).toContain('>Owned</tspan>');
+  });
+
+  it('map and --cached agree: a storyboard whose journey zone left the map is stale for both', async () => {
+    const { root, file } = await setup();
+    await run(root, ['visualize', 'src/payments', '--storyboard', file]);
+    writeConfig(root, { zones: { api: ['src/api/**'] } });
+    const cached = JSON.parse((await run(root, ['visualize', 'src/payments', '--cached', '--json'])).stdout);
+    expect(cached).toMatchObject({ cached: false });
+    await run(root, ['map']);
+    const html = readFileSync(join(root, '.understanding', 'report.html'), 'utf8');
+    const d = JSON.parse(html.match(/<script type="application\/json" id="data">([\s\S]*?)<\/script>/)![1]);
+    expect(d.zones.find((z: { id: string }) => z.id === 'src/payments').visual).toBeNull();
+  });
+
   it('--cached reuses a fresh storyboard with live scene-1 data, and refuses a stale one', async () => {
     const { root, file } = await setup();
     const none = await run(root, ['visualize', 'src/payments', '--cached', '--json']);
