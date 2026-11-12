@@ -2,12 +2,12 @@ import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { hierarchy, treemap, treemapSquarify } from 'd3-hierarchy';
 import { DEFAULT_CONFIG } from './config.js';
+import { esc, safeJson } from './html.js';
 import { howEstimatesWork, REPORT_TEMPLATE, type MethodSettings } from './report-template.js';
 import type { MapResult, ZoneResult, ZoneState } from './types.js';
 
 interface Node { name: string; zone?: ZoneResult; children?: Node[] }
 
-const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 const label = (s: ZoneState) => s[0].toUpperCase() + s.slice(1);
 
 /** Nests zones by path segment; a zone that is also a parent of other zones becomes a leaf of its own. */
@@ -82,8 +82,6 @@ function reportData(m: MapResult, threshold: number) {
     }),
   };
 }
-
-const safeJson = (v: unknown) => JSON.stringify(v).replace(/</g, '\\u003c').replace(/\u2028/g, '\\u2028').replace(/\u2029/g, '\\u2029');
 
 export function renderReport(m: MapResult, opts: Partial<MethodSettings> = {}): string {
   const settings: MethodSettings = {
