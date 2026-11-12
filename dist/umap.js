@@ -3243,7 +3243,7 @@ function buildMap(root, opts = {}) {
   const edits = readEdits(root);
   if (solo) {
     const live = new Set(edits.map((e) => e.session));
-    edits.push(...backfillSessionEdits(root, opts.homeDir ?? homedir()).filter((e) => !live.has(e.session)));
+    for (const e of backfillSessionEdits(root, opts.homeDir ?? homedir())) if (!live.has(e.session)) edits.push(e);
   }
   const myEmail = currentEmail(root);
   const me = myEmail ? handleFor(myEmail, config) : "me";
