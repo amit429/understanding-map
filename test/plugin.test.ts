@@ -94,14 +94,15 @@ describe('answer-key-checker agent', () => {
 });
 
 describe('hooks.json', () => {
-  it('matches the Task 12 hooks', () => {
+  it('matches the Task 12 hooks, guarded so a missing node never fails a hook', () => {
+    const cmd = (event: string) => `command -v node >/dev/null 2>&1 && node "\${CLAUDE_PLUGIN_ROOT}/dist/umap.js" hook ${event} || true`;
     expect(JSON.parse(read('hooks/hooks.json'))).toEqual({
       hooks: {
         PostToolUse: [{
           matcher: 'Edit|Write|MultiEdit|NotebookEdit',
-          hooks: [{ type: 'command', command: 'node "${CLAUDE_PLUGIN_ROOT}/dist/umap.js" hook post-tool-use' }],
+          hooks: [{ type: 'command', command: cmd('post-tool-use') }],
         }],
-        Stop: [{ hooks: [{ type: 'command', command: 'node "${CLAUDE_PLUGIN_ROOT}/dist/umap.js" hook stop' }] }],
+        Stop: [{ hooks: [{ type: 'command', command: cmd('stop') }] }],
       },
     });
     expect(Object.keys(commands)).toContain('hook');
