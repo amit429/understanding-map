@@ -110,7 +110,7 @@ The **danger rank** combines how dark a zone is with how critical it is: how man
 
 ## Seeing a zone: `/understanding-map:visualize`
 
-After a session, or before one, `/understanding-map:visualize src/payments` builds a 60–90 second animation of one zone and writes it to `.understanding/local/visuals/<zone>.html`. Open it in a browser:
+After a session, or before one, `/understanding-map:visualize src/payments` builds a 60–90 second animation of one zone (about 45 seconds when the zone has no product journey) and writes it to `.understanding/local/visuals/<zone>.html`. Open it in a browser:
 
 1. **Why this matters:** the zone, its state and how many files depend on it.
 2. **Product journey:** one real user action (for example "User clicks Pay") travels box to box until this zone does its job.

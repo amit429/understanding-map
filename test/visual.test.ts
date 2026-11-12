@@ -157,6 +157,29 @@ describe('timeline', () => {
   });
 });
 
+describe('timings follow the design (scene table, §2)', () => {
+  for (const stops of [2, 3, 4, 5, 6]) {
+    for (const steps of [3, 4, 5, 6, 7]) {
+      it(`${stops} stops, ${steps} steps`, () => {
+        for (const outcome of [true, false]) {
+          const journey = Array.from({ length: stops }, (_, i) => ({ label: `s${i}`, zone: `z${i}`, ref: `a.ts:${i + 1}`, target: i === stops - 1, ...(i === stops - 1 ? { role: 'r' } : {}) }));
+          const story = sb({ journey, outcome: outcome ? { label: 'done' } : null, steps: Array.from({ length: steps }, (_, i) => ({ label: `x${i}`, ref: `a.ts:${i + 1}` })) });
+          const d = Object.fromEntries(timeline(story).scenes.map((x) => [x.id, x.duration]));
+          expect(d.why).toBe(10);
+          expect(d.journey).toBeGreaterThanOrEqual(20);
+          expect(d.journey).toBeLessThanOrEqual(30);
+          expect(d.inside).toBeGreaterThanOrEqual(25);
+          expect(d.inside).toBeLessThanOrEqual(40);
+          expect(d.outro).toBe(10);
+          const total = d.why + d.journey + d.inside + d.outro;
+          expect(total).toBeGreaterThanOrEqual(60);
+          expect(total).toBeLessThanOrEqual(90);
+        }
+      });
+    }
+  }
+});
+
 describe('checkStoryboard', () => {
   const ctx: StoryboardContext = {
     zone: 'src/payments',

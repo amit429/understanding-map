@@ -60,11 +60,15 @@ export function checkStoryboard(raw: unknown, ctx: StoryboardContext): Storyboar
 
 // ---- timeline ---------------------------------------------------------------------------------------------------
 
+// Scene lengths follow the design's table: why ~10 s, journey 20–30 s, inside 25–40 s, back out ~10 s.
 const ZOOM = 1.2;
-const HOP = 1.3;
-const PAUSE = 0.5;
-const TARGET_HOLD = 2.5;
-const STEP = 3.6;
+const HOP = 1.6;
+const PAUSE = 0.8;
+const TARGET_HOLD = 3;
+const WHY = 10;
+const OUTRO = 10;
+const JOURNEY_MIN = 20;
+const INSIDE_TARGET = 29;
 
 interface Timeline {
   scenes: Array<{ id: SceneId; title: string; duration: number }>;
@@ -96,12 +100,14 @@ export function timeline(sb: Storyboard): Timeline {
     }
     const visits = boxes.map((_, k): [number, number] => [hops[k][1], k + 1 < arrows ? hops[k + 1][0] : 1e9]);
     journey = { start: 0.3, boxes, outcome, hops, visits, reach, role: reach + 0.3 };
-    journeyDur = Math.max(14, Math.round((t + 3) * 10) / 10);
+    journeyDur = Math.max(JOURNEY_MIN, Math.round((t + 3) * 10) / 10);
   }
-  const steps = sb.steps.map((_, i): [number, number] => [1.6 + i * STEP, i === sb.steps.length - 1 ? 1e9 : 1.6 + (i + 1) * STEP]);
-  const insideDur = Math.round((1.6 + sb.steps.length * STEP + 2) * 10) / 10;
+  // Each step holds 4–7 s, aiming at about INSIDE_TARGET seconds for the scene.
+  const step = Math.min(7, Math.max(4, (INSIDE_TARGET - 4.6) / sb.steps.length));
+  const steps = sb.steps.map((_, i): [number, number] => [1.6 + i * step, i === sb.steps.length - 1 ? 1e9 : 1.6 + (i + 1) * step]);
+  const insideDur = Math.round((1.6 + sb.steps.length * step + 3) * 10) / 10;
   const outro = { gotcha: 1.4, closing: sb.gotcha ? 3.4 : 1.6 };
-  const durations: Record<SceneId, number> = { why: 9, journey: journeyDur, inside: insideDur, outro: outro.closing + 5 };
+  const durations: Record<SceneId, number> = { why: WHY, journey: journeyDur, inside: insideDur, outro: OUTRO };
   const ids = sceneIds(sb);
   return {
     scenes: ids.map((id, i) => ({ id, title: `${i + 1} · ${TITLES[id]}`, duration: durations[id] })),
