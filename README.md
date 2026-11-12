@@ -4,6 +4,10 @@
 
 A Claude Code plugin for the age of AI-written code. It maps which parts of your repository no human could confidently explain, debug or change. It ranks them by how much damage they could do, and turns them back into understood code through short, verified learning sessions.
 
+<a href="docs/media/understanding-map-launch.mp4"><img src="docs/media/launch-poster.png" alt="Understanding Map in 30 seconds: play the launch video" width="720"></a>
+
+▶ **[Watch Understanding Map in 30 seconds](docs/media/understanding-map-launch.mp4)** (with sound): git blame, the map, a learning session, and Dark → Owned.
+
 Example `/understanding-map:map` output (illustrative):
 
 ```
