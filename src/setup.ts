@@ -9,11 +9,15 @@ const TEAM_ATTRIBUTES = [
   '.understanding/agent-share/*.jsonl merge=union',
 ];
 
-/** Writes .understanding/config.json and its own ignore rules; never touches git state or the root .gitignore. */
+/**
+ * Writes .understanding/config.json and its own ignore rules; never touches git state or the root .gitignore.
+ * `critical` replaces the configured critical globs when given (an empty array clears them); when omitted, the
+ * existing ones are kept.
+ */
 export function runSetup(
   root: string,
-  opts: { mode: Config['mode']; critical: string[] },
-): { configPath: string; gitignoreLines: string[]; gitattributesLines: string[] } {
+  opts: { mode: Config['mode']; critical?: string[] },
+): { configPath: string; critical: string[]; gitignoreLines: string[]; gitattributesLines: string[] } {
   const dir = umDir(root);
   mkdirSync(dir, { recursive: true });
 
@@ -25,7 +29,9 @@ export function runSetup(
       if (typeof raw === 'object' && raw !== null && !Array.isArray(raw)) existing = raw;
     } catch { /* unreadable config is replaced */ }
   }
-  writeFileSync(configPath, JSON.stringify({ ...existing, mode: opts.mode, critical: opts.critical }, null, 2) + '\n');
+  const kept = Array.isArray(existing.critical) && existing.critical.every((g) => typeof g === 'string') ? existing.critical as string[] : [];
+  const critical = opts.critical ?? kept;
+  writeFileSync(configPath, JSON.stringify({ ...existing, mode: opts.mode, critical }, null, 2) + '\n');
 
   const ignore = opts.mode === 'team' ? TEAM_IGNORE : SOLO_IGNORE;
   const gitignoreLines = ignore.trimEnd().split('\n');
@@ -44,5 +50,5 @@ export function runSetup(
   }
 
   machineId(root);
-  return { configPath, gitignoreLines, gitattributesLines };
+  return { configPath, critical, gitignoreLines, gitattributesLines };
 }

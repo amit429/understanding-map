@@ -137,6 +137,18 @@ describe('cli setup', () => {
     expect(s).toMatchObject({ setUp: true, mode: 'team' });
   });
 
+  it('keeps existing critical globs unless --critical is given; an explicit empty --critical clears them', async () => {
+    const root = fixture();
+    await run(root, ['setup', '--mode', 'solo', '--critical', 'src/**']);
+    const again = await run(root, ['setup', '--mode', 'team']);
+    expect(JSON.parse(read(root, '.understanding/config.json')).critical).toEqual(['src/**']);
+    expect(again.stdout).toContain('with critical areas: src/**');
+    await run(root, ['setup', '--mode', 'team', '--critical', '']);
+    expect(JSON.parse(read(root, '.understanding/config.json')).critical).toEqual([]);
+    expect(runSetup(root, { mode: 'solo', critical: ['a/**'] }).critical).toEqual(['a/**']);
+    expect(runSetup(root, { mode: 'solo' }).critical).toEqual(['a/**']);
+  });
+
   it('solo setup says everything stays local', async () => {
     const root = fixture();
     const r = await run(root, ['setup', '--mode', 'solo']);

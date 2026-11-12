@@ -4013,7 +4013,9 @@ function runSetup(root, opts) {
     } catch {
     }
   }
-  writeFileSync8(configPath2, JSON.stringify({ ...existing, mode: opts.mode, critical: opts.critical }, null, 2) + "\n");
+  const kept = Array.isArray(existing.critical) && existing.critical.every((g) => typeof g === "string") ? existing.critical : [];
+  const critical = opts.critical ?? kept;
+  writeFileSync8(configPath2, JSON.stringify({ ...existing, mode: opts.mode, critical }, null, 2) + "\n");
   const ignore = opts.mode === "team" ? TEAM_IGNORE : SOLO_IGNORE;
   const gitignoreLines = ignore.trimEnd().split("\n");
   writeFileSync8(join11(dir, ".gitignore"), ignore);
@@ -4029,7 +4031,7 @@ function runSetup(root, opts) {
     }
   }
   machineId(root);
-  return { configPath: configPath2, gitignoreLines, gitattributesLines };
+  return { configPath: configPath2, critical, gitignoreLines, gitattributesLines };
 }
 
 // src/terminal.ts
@@ -4184,11 +4186,11 @@ var commands = {
       err('Usage: setup --mode solo|team [--critical "<glob>,<glob>"]');
       return 2;
     }
-    const critical = (valueOf2("--critical") ?? "").split(",").map((g) => g.trim()).filter(Boolean);
+    const critical = args.includes("--critical") ? (valueOf2("--critical") ?? "").split(",").map((g) => g.trim()).filter(Boolean) : void 0;
     const r = runSetup(root, { mode, critical });
     const lines = [
       `Set up Understanding Map in ${mode} mode.`,
-      `Wrote ${relative3(root, r.configPath)}${critical.length ? ` with critical areas: ${critical.join(", ")}` : ""}.`,
+      `Wrote ${relative3(root, r.configPath)}${r.critical.length ? ` with critical areas: ${r.critical.join(", ")}` : ""}.`,
       mode === "solo" ? "Everything in .understanding/ stays on this machine (it is ignored by git)." : "Local data and the HTML report are ignored by git; passes and anonymous zone totals can be shared."
     ];
     if (r.gitattributesLines.length) lines.push(`Added ${r.gitattributesLines.length} merge rule(s) to .gitattributes so shared files merge cleanly.`);

@@ -130,11 +130,14 @@ export const commands: Record<string, Command> = {
       err('Usage: setup --mode solo|team [--critical "<glob>,<glob>"]');
       return 2;
     }
-    const critical = (valueOf('--critical') ?? '').split(',').map((g) => g.trim()).filter(Boolean);
+    // Existing critical globs are kept unless --critical is passed; an explicit empty value clears them.
+    const critical = args.includes('--critical')
+      ? (valueOf('--critical') ?? '').split(',').map((g) => g.trim()).filter(Boolean)
+      : undefined;
     const r = runSetup(root, { mode, critical });
     const lines = [
       `Set up Understanding Map in ${mode} mode.`,
-      `Wrote ${relative(root, r.configPath)}${critical.length ? ` with critical areas: ${critical.join(', ')}` : ''}.`,
+      `Wrote ${relative(root, r.configPath)}${r.critical.length ? ` with critical areas: ${r.critical.join(', ')}` : ''}.`,
       mode === 'solo'
         ? 'Everything in .understanding/ stays on this machine (it is ignored by git).'
         : 'Local data and the HTML report are ignored by git; passes and anonymous zone totals can be shared.',

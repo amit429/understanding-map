@@ -32,7 +32,8 @@ Claude Code shows `Base directory for this skill: <path>` when this skill loads.
 
 4. **Run setup.**
    - With critical paths: `node "<base>/../../dist/umap.js" setup --mode <solo|team> --critical "<glob>,<glob>"`
-   - Without: `node "<base>/../../dist/umap.js" setup --mode <solo|team>`
+   - Without (skipped or "none"): `node "<base>/../../dist/umap.js" setup --mode <solo|team>`. This keeps any critical paths already in the config.
+   - To remove existing critical paths, only when the user asks: `node "<base>/../../dist/umap.js" setup --mode <solo|team> --critical ""`
 
 5. **Say what changed.** Show the command's output, then sum it up in a sentence or two: the mode, the config file written, any `.gitattributes` merge rules added. In team mode, repeat once that the plugin never makes commits; the user commits those files with their normal work.
 
