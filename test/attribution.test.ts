@@ -17,6 +17,17 @@ const edit = (file: string, lines: number, ts: string): EditLogEntry => ({ file,
 const tmp = () => mkdtempSync(join(tmpdir(), 'umap-attr-'));
 
 describe('agentLinesByCommit', () => {
+  it('with isMine, matches edit-log lines only to my commits; trailers and notes still count for everyone', () => {
+    const theirs = { ...commit('c2', '2026-01-02T00:00:00Z', [['f', 10]]), email: 'bob@x.io' };
+    const trailer = { ...commit('c1', '2026-01-01T00:00:00Z', [['g', 7]], true), email: 'bob@x.io' };
+    const mine = commit('c0', '2025-12-31T00:00:00Z', [['h', 4]]);
+    const edits = [edit('f', 6, '2026-01-01T12:00:00Z'), edit('h', 4, '2025-12-30T00:00:00Z')];
+    const r = agentLinesByCommit([theirs, trailer, mine], edits, new Set(), { isMine: (e) => e === 'a@b.c' });
+    expect(r.has('c2')).toBe(false);
+    expect(r.get('c1')!.get('g')).toBe(7);
+    expect(r.get('c0')!.get('h')).toBe(4);
+  });
+
   it('counts all added lines for trailer commits and noted commits', () => {
     const commits = [commit('c2', '2026-01-02T00:00:00Z', [['f', 5]]), commit('c1', '2026-01-01T00:00:00Z', [['g', 7]], true)];
     const r = agentLinesByCommit(commits, [], new Set(['c2']));

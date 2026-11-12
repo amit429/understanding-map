@@ -2399,12 +2399,14 @@ function readJsonlUnion(root, dirRel, defaultRef) {
 // src/attribution.ts
 function agentLinesByCommit(commits, edits, notedShas, opts = {}) {
   const includeAll = opts.includeTrailersAndNotes ?? true;
+  const isMine = opts.isMine ?? (() => true);
   const editsByFile = /* @__PURE__ */ new Map();
   for (const e of edits) (editsByFile.get(e.file) ?? editsByFile.set(e.file, []).get(e.file)).push(e);
   const result = /* @__PURE__ */ new Map();
   commits.forEach((c, i) => {
     const perFile = /* @__PURE__ */ new Map();
     const wholeCommit = includeAll && (c.agentTrailer || notedShas.has(c.sha));
+    if (!wholeCommit && !isMine(c.email)) return;
     for (const f of c.files) {
       if (f.added <= 0) continue;
       let lines = 0;
@@ -3218,14 +3220,16 @@ function buildMap(root, opts = {}) {
     const live = new Set(edits.map((e) => e.session));
     edits.push(...backfillSessionEdits(root, opts.homeDir ?? homedir()).filter((e) => !live.has(e.session)));
   }
-  const agentLines = agentLinesByCommit(commits, edits, notedShas);
+  const myEmail = currentEmail(root);
+  const me = handleFor(myEmail, config) || "me";
+  const isMine = (email) => myEmail !== "" && handleFor(email, config) === me;
+  const agentLines = agentLinesByCommit(commits, edits, notedShas, { isMine });
   const defaultRef = defaultBranchRef(root);
   let sharedAgentShare = {};
   if (!solo) {
-    syncAgentShare(root, zones, commits, agentLinesByCommit(commits, edits, notedShas, { includeTrailersAndNotes: false }));
+    syncAgentShare(root, zones, commits, agentLinesByCommit(commits, edits, notedShas, { includeTrailersAndNotes: false, isMine }));
     sharedAgentShare = sharedShareByZone(root, zones, commits, now, config.historyDays, defaultRef);
   }
-  const me = handleFor(currentEmail(root), config) || "me";
   return scoreMap({
     config,
     now,

@@ -88,17 +88,20 @@ export function buildMap(root: string, opts: BuildOptions = {}): MapResult {
     const live = new Set(edits.map((e) => e.session));
     edits.push(...backfillSessionEdits(root, opts.homeDir ?? homedir()).filter((e) => !live.has(e.session)));
   }
-  const agentLines = agentLinesByCommit(commits, edits, notedShas);
+  const myEmail = currentEmail(root);
+  const me = handleFor(myEmail, config) || 'me';
+  // The edit log is this machine's agent edits: match it only to commits I authored.
+  const isMine = (email: string) => myEmail !== '' && handleFor(email, config) === me;
+  const agentLines = agentLinesByCommit(commits, edits, notedShas, { isMine });
 
   const defaultRef = defaultBranchRef(root);
   let sharedAgentShare: Record<string, number> = {};
   if (!solo) {
     // Only private edit-log knowledge is shared; trailers and notes are already public (R6).
-    syncAgentShare(root, zones, commits, agentLinesByCommit(commits, edits, notedShas, { includeTrailersAndNotes: false }));
+    syncAgentShare(root, zones, commits, agentLinesByCommit(commits, edits, notedShas, { includeTrailersAndNotes: false, isMine }));
     sharedAgentShare = sharedShareByZone(root, zones, commits, now, config.historyDays, defaultRef);
   }
 
-  const me = handleFor(currentEmail(root), config) || 'me';
   return scoreMap({
     config, now, me,
     handleOf: (email) => handleFor(email, config),

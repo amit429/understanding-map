@@ -6,14 +6,19 @@ import { readJsonlUnion } from './jsonl-union.js';
 import type { AgentShareEntry, Commit, EditLogEntry, Zone } from './types.js';
 import { zoneIndex } from './zones.js';
 
-/** sha -> path -> agent-written lines. `commits` is newest-first. */
+/**
+ * sha -> path -> agent-written lines. `commits` is newest-first. Trailer and notes commits count for every author.
+ * The edit log records only this machine's agent edits, so with `isMine` it is matched only to commits whose author
+ * email it accepts (the pipeline passes "authored by me"); without it, every commit is a candidate.
+ */
 export function agentLinesByCommit(
   commits: Commit[],
   edits: EditLogEntry[],
   notedShas: Set<string>,
-  opts: { includeTrailersAndNotes?: boolean } = {},
+  opts: { includeTrailersAndNotes?: boolean; isMine?: (email: string) => boolean } = {},
 ): Map<string, Map<string, number>> {
   const includeAll = opts.includeTrailersAndNotes ?? true;
+  const isMine = opts.isMine ?? (() => true);
   const editsByFile = new Map<string, EditLogEntry[]>();
   for (const e of edits) (editsByFile.get(e.file) ?? editsByFile.set(e.file, []).get(e.file)!).push(e);
 
@@ -21,6 +26,7 @@ export function agentLinesByCommit(
   commits.forEach((c, i) => {
     const perFile = new Map<string, number>();
     const wholeCommit = includeAll && (c.agentTrailer || notedShas.has(c.sha));
+    if (!wholeCommit && !isMine(c.email)) return;
     for (const f of c.files) {
       if (f.added <= 0) continue;
       let lines = 0;

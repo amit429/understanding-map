@@ -75,6 +75,18 @@ describe('buildMap review cache', () => {
 });
 
 describe('buildMap fixes', () => {
+  it("never attributes my private agent edits to someone else's commit", () => {
+    const root = makeRepo([
+      { files: { 'src/f.ts': body('a') }, email: 'alice@example.com', date: daysAgo(10) },
+      { files: { 'src/f.ts': body('a') + body('b', 100) }, email: 'bob@example.com', date: daysAgo(5) },
+    ]);
+    gitIn(root, ['config', 'user.email', 'alice@example.com']);
+    appendEdit(root, { file: 'src/f.ts', ranges: [], lines: 100, session: 's', ts: daysAgo(6) });
+    const z = buildMap(root, { now: NOW, homeDir: emptyHome() }).zones.find((x) => x.zone.id === 'src')!;
+    expect(z.agentShare).toBe(0);
+    for (const p of z.people) expect(p.evidence.some((e) => e.kind === 'agent-share')).toBe(false);
+  });
+
   it('does not double-count backfilled edits from sessions the live log already has', () => {
     const root = fixture();
     const home = emptyHome();
