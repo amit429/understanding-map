@@ -2609,13 +2609,25 @@ function readFlags(root) {
   }
   return {};
 }
-function addFlag(root, zone, flag) {
-  const flags = readFlags(root);
-  const cur = flags[zone] ?? [];
-  if (cur.includes(flag)) return;
-  flags[zone] = [...cur, flag];
+function writeFlags(root, flags) {
   mkdirSync5(localDir3(root), { recursive: true });
   writeFileSync5(join7(localDir3(root), "flags.json"), JSON.stringify(flags, null, 2) + "\n");
+}
+function addFlag(root, zone, flag) {
+  const flags = readFlags(root);
+  const cur = Array.isArray(flags[zone]) ? flags[zone] : [];
+  if (cur.includes(flag)) return;
+  flags[zone] = [...cur, flag];
+  writeFlags(root, flags);
+}
+function removeFlag(root, zone, flag) {
+  const flags = readFlags(root);
+  const cur = Object.hasOwn(flags, zone) && Array.isArray(flags[zone]) ? flags[zone] : [];
+  if (!cur.includes(flag)) return;
+  const rest = cur.filter((f) => f !== flag);
+  if (rest.length) flags[zone] = rest;
+  else delete flags[zone];
+  writeFlags(root, flags);
 }
 
 // src/reviews.ts
@@ -3903,6 +3915,7 @@ function recordResult(root, r) {
         const z = before.zones.find((x) => x.zone.id === id);
         appendPass(root, before.me, { zone: id, level: Math.max(levelOf(before, id), 65), fingerprint: z.zone.fingerprint, date, kind: "handoff" });
       }
+      for (const id of zoneIds) removeFlag(root, id, "unreviewed-agent-code");
     } else if (result === "miss") {
       for (const id of zoneIds) addFlag(root, id, "unreviewed-agent-code");
     }
@@ -3913,6 +3926,8 @@ function recordResult(root, r) {
       const current = levelOf(before, id);
       if (result === "pass") {
         appendPass(root, before.me, { zone: id, level: Math.max(current, 80), fingerprint: z.zone.fingerprint, date, kind: "session" });
+        removeFlag(root, id, "hard-to-verify");
+        removeFlag(root, id, "unreviewed-agent-code");
       } else if (result === "partial") {
         appendLocalPartial(root, { zone: id, level: Math.max(current, 50), fingerprint: z.zone.fingerprint, date, kind: "session" });
         appendAttempt(root, { zone: id, kind: "session", result: "partial", date });

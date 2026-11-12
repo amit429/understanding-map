@@ -2,7 +2,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { appendEdit, uncheckedEdits } from '../src/editlog';
-import { readFlags } from '../src/events';
+import { addFlag, readFlags, removeFlag } from '../src/events';
 import { buildMap } from '../src/pipeline';
 import { gradeSession, handoffSet, markUnverifiable, recordResult, skipHandoff } from '../src/record';
 import { daysAgo, emptyHome, fixture, NOW } from './helpers/fixture';
@@ -109,6 +109,40 @@ describe('handoff', () => {
     skipHandoff(root, NOW);
     expect(readFlags(root)).toEqual({ human: ['unreviewed-agent-code'] });
     expect(handoffSet(root).zones).toEqual([]);
+  });
+
+  it('a session pass clears both flags on its zone; a partial or miss clears nothing', () => {
+    const { root, home } = setup();
+    for (const z of ['agent', 'human']) {
+      markUnverifiable(root, z);
+      addFlag(root, z, 'unreviewed-agent-code');
+    }
+    recordResult(root, { kind: 'session', zones: ['human'], grades: ['partial'], now: NOW, homeDir: home });
+    recordResult(root, { kind: 'session', zones: ['human'], grades: ['miss'], now: NOW, homeDir: home });
+    expect(readFlags(root).human).toEqual(['hard-to-verify', 'unreviewed-agent-code']);
+    recordResult(root, { kind: 'session', zones: ['agent'], grades: ['pass', 'pass'], now: NOW, homeDir: home });
+    expect(readFlags(root)).toEqual({ human: ['hard-to-verify', 'unreviewed-agent-code'] });
+  });
+
+  it('a handoff pass clears unreviewed-agent-code (only) on the touched zones', () => {
+    const { root, home } = setup();
+    buildMap(root, { now: NOW, homeDir: home });
+    for (const z of ['agent', 'human']) {
+      markUnverifiable(root, z);
+      addFlag(root, z, 'unreviewed-agent-code');
+    }
+    edit(root, 'agent/a.ts', 60, daysAgo(1));
+    recordResult(root, { kind: 'handoff', zones: [], grades: ['pass', 'pass'], now: NOW, homeDir: home });
+    expect(readFlags(root)).toEqual({ agent: ['hard-to-verify'], human: ['hard-to-verify', 'unreviewed-agent-code'] });
+  });
+
+  it('removeFlag removes one flag and drops a zone with none left', () => {
+    const { root } = setup();
+    addFlag(root, 'agent', 'hard-to-verify');
+    removeFlag(root, 'agent', 'unreviewed-agent-code');
+    expect(readFlags(root)).toEqual({ agent: ['hard-to-verify'] });
+    removeFlag(root, 'agent', 'hard-to-verify');
+    expect(readFlags(root)).toEqual({});
   });
 
   it('markUnverifiable adds hard-to-verify', () => {

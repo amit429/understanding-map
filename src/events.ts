@@ -67,11 +67,26 @@ export function readFlags(root: string): Record<string, Flag[]> {
   return {};
 }
 
-export function addFlag(root: string, zone: string, flag: Flag): void {
-  const flags = readFlags(root);
-  const cur = flags[zone] ?? [];
-  if (cur.includes(flag)) return;
-  flags[zone] = [...cur, flag];
+function writeFlags(root: string, flags: Record<string, Flag[]>): void {
   mkdirSync(localDir(root), { recursive: true });
   writeFileSync(join(localDir(root), 'flags.json'), JSON.stringify(flags, null, 2) + '\n');
+}
+
+export function addFlag(root: string, zone: string, flag: Flag): void {
+  const flags = readFlags(root);
+  const cur = Array.isArray(flags[zone]) ? flags[zone] : [];
+  if (cur.includes(flag)) return;
+  flags[zone] = [...cur, flag];
+  writeFlags(root, flags);
+}
+
+/** Removes one flag from a zone; a zone left with no flags is dropped. */
+export function removeFlag(root: string, zone: string, flag: Flag): void {
+  const flags = readFlags(root);
+  const cur = Object.hasOwn(flags, zone) && Array.isArray(flags[zone]) ? flags[zone] : [];
+  if (!cur.includes(flag)) return;
+  const rest = cur.filter((f) => f !== flag);
+  if (rest.length) flags[zone] = rest;
+  else delete flags[zone];
+  writeFlags(root, flags);
 }

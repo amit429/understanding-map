@@ -44,15 +44,15 @@ Ask the user to answer in their own words without AI help; it is on their honour
 
 Run `node "<base>/../../dist/umap.js" record --kind handoff --grades <g1>,<g2>`. The first line it prints is always `Result: pass`, `Result: partial` or `Result: miss`; the lines after it are either changes, `zone: Before → After (level a → b)`, or `No change on the map.`. Branch on the `Result:` line:
 
-- **`Result: pass`:** show each change as `zone: Before → After` and call the levels estimates. If it says `No change on the map.`, say the check passed and those zones were already at or above that level.
+- **`Result: pass`:** show each change as `zone: Before → After` and call the levels estimates. A pass also clears any "unreviewed agent code" mark on the touched zones. If it says `No change on the map.`, say the check passed and those zones were already at or above that level.
 - **`Result: partial`:** say the check is done and nothing changed on the map.
-- **`Result: miss`:** say the check is done, nothing was raised on the map, and the touched zones are marked as unreviewed agent code, which they can learn later with `/understanding-map:learn`.
+- **`Result: miss`:** say the check is done, nothing was raised on the map, and the touched zones are marked as unreviewed agent code; passing a later handoff check or a `/understanding-map:learn` session on that zone clears the mark.
 
 Whatever the result, the not-yet-checked set is now cleared.
 
 ## Skip
 
-If the user skips or stops at any point before recording, run `node "<base>/../../dist/umap.js" handoff-skip`. Tell them, in one line, that the check is cleared and those edits are marked as unreviewed agent code on the map, which they can learn later with `/understanding-map:learn`.
+If the user skips or stops at any point before recording, run `node "<base>/../../dist/umap.js" handoff-skip`. Tell them, in one line, that the check is cleared and those edits are marked as unreviewed agent code on the map; passing a later handoff check or a `/understanding-map:learn` session on that zone clears the mark.
 
 ## Rules
 

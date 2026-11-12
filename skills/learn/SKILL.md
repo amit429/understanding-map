@@ -75,6 +75,8 @@ The first line it prints is always `Result: pass`, `Result: partial` or `Result:
 - **`Result: pass` or `Result: partial`:** the lines after it are either changes, `zone: Before → After (level a → b)`, or `No change on the map.`. Show each change as `zone: Before → After` (for example "payments: Dark → Owned") and call the new level an estimate. If it says `No change on the map.`, say the result is recorded and the zone's estimate was already at or above that level, so the map looks the same.
 - **`Result: miss`:** nothing changed on the map. Suggest trying this zone again in 3 or more days, with different questions.
 
+A pass also clears the zone's "hard to verify" and "unreviewed agent code" marks.
+
 ## Stopping
 
 If the user stops, skips or changes topic at any point, stop there and record nothing: no `record`, no `unverifiable`. No guilt, no nagging. Aim to finish the whole session in under 5 minutes.

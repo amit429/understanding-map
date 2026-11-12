@@ -1,5 +1,5 @@
 import { dirname } from 'node:path';
-import { addFlag, appendAttempt, appendLocalPartial, appendPass } from './events.js';
+import { addFlag, appendAttempt, appendLocalPartial, appendPass, removeFlag } from './events.js';
 import { markChecked, uncheckedEdits } from './editlog.js';
 import { buildMap } from './pipeline.js';
 import { readZoneCache } from './zones.js';
@@ -64,6 +64,7 @@ export function recordResult(
         const z = before.zones.find((x) => x.zone.id === id)!;
         appendPass(root, before.me, { zone: id, level: Math.max(levelOf(before, id), 65), fingerprint: z.zone.fingerprint, date, kind: 'handoff' });
       }
+      for (const id of zoneIds) removeFlag(root, id, 'unreviewed-agent-code');
     } else if (result === 'miss') {
       for (const id of zoneIds) addFlag(root, id, 'unreviewed-agent-code');
     }
@@ -74,6 +75,8 @@ export function recordResult(
       const current = levelOf(before, id);
       if (result === 'pass') {
         appendPass(root, before.me, { zone: id, level: Math.max(current, 80), fingerprint: z.zone.fingerprint, date, kind: 'session' });
+        removeFlag(root, id, 'hard-to-verify');
+        removeFlag(root, id, 'unreviewed-agent-code');
       } else if (result === 'partial') {
         appendLocalPartial(root, { zone: id, level: Math.max(current, 50), fingerprint: z.zone.fingerprint, date, kind: 'session' });
         appendAttempt(root, { zone: id, kind: 'session', result: 'partial', date });
