@@ -5,12 +5,12 @@ import { ensureUnderstandingIgnore, isSetUp, loadConfig } from './config.js';
 import { repoRootOf } from './git.js';
 import { onPostToolUse, onStop } from './hooks.js';
 import { buildMap } from './pipeline.js';
-import { ghAvailable, reviewCounts } from './reviews.js';
+import { ghAvailable, readReviewCache, reviewCountsByPath, type PathCounts } from './reviews.js';
 import { renderReport, writeReport } from './report.js';
 import { handoffSet, markUnverifiable, recordResult, skipHandoff, type Grade } from './record.js';
 import { runSetup } from './setup.js';
 import { formatSummary, formatWho } from './terminal.js';
-import type { MapResult, ZoneResult } from './types.js';
+import type { Config, MapResult, ZoneResult } from './types.js';
 
 type Command = (args: string[]) => Promise<number>;
 
@@ -62,11 +62,22 @@ function findZone(m: MapResult, root: string, target: string): ZoneResult | null
   return m.zones.find((z) => z.zone.files.some((f) => f.startsWith(dir))) ?? null;
 }
 
-/** PR review signal via gh, when available. Optional: any failure yields no reviews and never affects the map. */
-function optionalReviews(root: string, m: MapResult): Record<string, Record<string, number>> {
+export interface ReviewDeps {
+  ghAvailable: (root: string) => boolean;
+  run?: (args: string[], timeoutMs: number) => string;
+}
+
+/**
+ * PR review signal via gh, when available. A fresh cache is used before gh is even probed. Optional: any failure
+ * yields no reviews and never affects the map.
+ */
+export function optionalReviews(root: string, config: Config, deps: ReviewDeps = { ghAvailable }): PathCounts {
   try {
-    if (process.env.UMAP_NO_GH === '1' || !ghAvailable(root)) return {};
-    return reviewCounts(root, m.zones.map((z) => z.zone), loadConfig(root));
+    if (process.env.UMAP_NO_GH === '1') return {};
+    const cached = readReviewCache(root);
+    if (cached) return cached;
+    if (!deps.ghAvailable(root)) return {};
+    return reviewCountsByPath(root, config, deps.run);
   } catch {
     return {};
   }
@@ -135,9 +146,7 @@ export const commands: Record<string, Command> = {
 
   map: guarded((root, args) => {
     ensureUnderstandingIgnore(root);
-    let m = buildMap(root);
-    const reviews = optionalReviews(root, m);
-    if (Object.keys(reviews).length) m = buildMap(root, { reviews });
+    const m = buildMap(root, { reviewsByPath: optionalReviews(root, loadConfig(root)) });
     const { flags } = parseArgs(args);
     let reportPath: string | null = null;
     if (!flags.has('--no-report')) {

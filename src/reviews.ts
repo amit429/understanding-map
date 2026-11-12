@@ -2,17 +2,18 @@ import { execFileSync } from 'node:child_process';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { umDir } from './config.js';
-import type { Config, Zone } from './types.js';
-import { zoneIndex } from './zones.js';
+import type { Config } from './types.js';
 
-type Counts = Record<string, Record<string, number>>;
+/** path → reviewer handle → substantive review comments. */
+export type PathCounts = Record<string, Record<string, number>>;
+type Counts = PathCounts;
 
 const BUDGET_MS = 20_000;
 const CACHE_MS = 24 * 3600_000;
 const MIN_COMMENT_CHARS = 20;
 
 const ghIn = (root: string, args: string[], timeout: number): string =>
-  execFileSync('gh', args, { cwd: root, timeout, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] });
+  execFileSync('gh', args, { cwd: root, timeout, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024, stdio: ['ignore', 'pipe', 'ignore'] });
 
 /** True when `gh` is installed and authenticated. */
 export function ghAvailable(root: string): boolean {
@@ -26,7 +27,8 @@ export function ghAvailable(root: string): boolean {
 
 const cachePath = (root: string) => join(umDir(root), 'local', 'reviews-cache.json');
 
-function readCache(root: string): Counts | null {
+/** The fresh (under 24 h) cached counts, or null. */
+export function readReviewCache(root: string): Counts | null {
   try {
     const v = JSON.parse(readFileSync(cachePath(root), 'utf8')) as { fetchedAt?: unknown; counts?: unknown };
     const at = typeof v.fetchedAt === 'string' ? Date.parse(v.fetchedAt) : NaN;
@@ -45,36 +47,39 @@ function writeCache(root: string, counts: Counts): void {
 }
 
 /**
- * Substantive PR review comments (body of at least 20 characters) per zone and reviewer handle, from the last 50
- * merged PRs. Approvals without comments count for nothing. Any failure or running out of the 20 s budget yields {}.
+ * Substantive PR review comments (body of at least 20 characters) per file path and reviewer handle, from the last
+ * 50 merged PRs. Approvals without comments count for nothing. Each gh call gets the remaining share of the 20 s
+ * budget as its timeout; any failure or running out of budget yields {}.
  */
-export function reviewCounts(
-  root: string, zones: Zone[], config: Config,
-  run: (args: string[]) => string = (args) => ghIn(root, args, BUDGET_MS),
-): Counts {
-  const cached = readCache(root);
+export function reviewCountsByPath(
+  root: string, config: Config,
+  run: (args: string[], timeoutMs: number) => string = (args, t) => ghIn(root, args, t),
+): PathCounts {
+  const cached = readReviewCache(root);
   if (cached) return cached;
   const started = Date.now();
-  const overBudget = () => Date.now() - started > BUDGET_MS;
+  const call = (args: string[]): string => {
+    const left = BUDGET_MS - (Date.now() - started);
+    if (left <= 0) throw new Error('review budget exceeded');
+    return run(args, Math.max(1, left));
+  };
   try {
-    const repo = run(['repo', 'view', '--json', 'nameWithOwner', '-q', '.nameWithOwner']).trim();
-    const prs = JSON.parse(run(['api', `repos/${repo}/pulls?state=closed&per_page=50`])) as Array<{ number: number; merged_at: string | null }>;
-    const zoneOf = zoneIndex(zones);
+    const repo = call(['repo', 'view', '--json', 'nameWithOwner', '-q', '.nameWithOwner']).trim();
+    const prs = JSON.parse(call(['api', `repos/${repo}/pulls?state=closed&per_page=50`, '--jq', '[.[] | {number, merged_at}]'])) as
+      Array<{ number: number; merged_at: string | null }>;
     const counts: Counts = {};
     for (const pr of prs.filter((p) => p.merged_at)) {
-      if (overBudget()) return {};
-      const comments = JSON.parse(run(['api', `repos/${repo}/pulls/${pr.number}/comments?per_page=100`])) as
+      const comments = JSON.parse(call(['api', `repos/${repo}/pulls/${pr.number}/comments?per_page=100`])) as
         Array<{ path?: string; body?: string; user?: { login?: string } }>;
       for (const c of comments) {
-        const zone = c.path ? zoneOf.get(c.path) : undefined;
         const login = c.user?.login;
-        if (!zone || !login || (c.body ?? '').trim().length < MIN_COMMENT_CHARS) continue;
+        if (!c.path || !login || (c.body ?? '').trim().length < MIN_COMMENT_CHARS) continue;
         const handle = config.handles[login] ?? login.toLowerCase();
-        counts[zone] ??= {};
-        counts[zone][handle] = (counts[zone][handle] ?? 0) + 1;
+        counts[c.path] ??= {};
+        counts[c.path][handle] = (counts[c.path][handle] ?? 0) + 1;
       }
     }
-    if (overBudget()) return {};
+    if (Date.now() - started > BUDGET_MS) return {};
     writeCache(root, counts);
     return counts;
   } catch {

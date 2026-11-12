@@ -33,6 +33,15 @@ describe('buildMap', () => {
   });
 });
 
+describe('buildMap reviews', () => {
+  it('folds per-path review counts into zone review evidence', () => {
+    const root = fixture();
+    const m = buildMap(root, { now: NOW, homeDir: emptyHome(), reviewsByPath: { 'human/h.ts': { zed: 3 }, 'nowhere.ts': { zed: 9 } } });
+    const zed = m.zones.find((z) => z.zone.id === 'human')!.people.find((p) => p.handle === 'zed');
+    expect(zed?.evidence.some((e) => e.kind === 'review' && e.text.includes('3'))).toBe(true);
+  });
+});
+
 describe('buildMap fixes', () => {
   it('does not double-count backfilled edits from sessions the live log already has', () => {
     const root = fixture();

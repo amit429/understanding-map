@@ -3,13 +3,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { DEFAULT_CONFIG } from '../src/config';
-import { reviewCounts } from '../src/reviews';
-import type { Zone } from '../src/types';
+import { reviewCountsByPath } from '../src/reviews';
 
-const zones: Zone[] = [
-  { id: 'payments', files: ['src/pay/x.ts'], loc: 10, fingerprint: {} },
-  { id: 'auth', files: ['src/auth/y.ts'], loc: 10, fingerprint: {} },
-];
 const long = 'This needs a null check before we charge.';
 const cfg = { ...DEFAULT_CONFIG, handles: { alice: 'al' } };
 
@@ -33,19 +28,19 @@ afterEach(() => vi.restoreAllMocks());
 
 describe('reviewCounts', () => {
   it('an approval with no comments contributes nothing', () => {
-    expect(reviewCounts(tmp(), zones, cfg, stub({}))).toEqual({});
+    expect(reviewCountsByPath(tmp(), cfg, stub({}))).toEqual({});
   });
 
-  it('counts substantive review comments per zone and handle, mapping logins', () => {
-    const r = reviewCounts(tmp(), zones, cfg, stub({
+  it('counts substantive review comments per path and handle, mapping logins', () => {
+    const r = reviewCountsByPath(tmp(), cfg, stub({
       1: [c('alice', 'src/pay/x.ts', long), c('alice', 'src/pay/x.ts', long), c('alice', 'src/pay/x.ts', 'lgtm'), c('Bob', 'src/auth/y.ts', long)],
       2: [c('alice', 'src/unknown.ts', long)],
     }));
-    expect(r).toEqual({ payments: { al: 2 }, auth: { bob: 1 } });
+    expect(r).toEqual({ 'src/pay/x.ts': { al: 2 }, 'src/auth/y.ts': { bob: 1 }, 'src/unknown.ts': { al: 1 } });
   });
 
   it('returns {} when run throws', () => {
-    expect(reviewCounts(tmp(), zones, cfg, () => { throw new Error('gh failed'); })).toEqual({});
+    expect(reviewCountsByPath(tmp(), cfg, () => { throw new Error('gh failed'); })).toEqual({});
   });
 
   it('returns {} (never partial) when the 20 s budget is exceeded', () => {
@@ -53,22 +48,34 @@ describe('reviewCounts', () => {
     vi.spyOn(Date, 'now').mockImplementation(() => now);
     const inner = stub({ 1: [c('alice', 'src/pay/x.ts', long)] });
     const slow = (args: string[]) => { now += 15_000; return inner(args); };
-    expect(reviewCounts(tmp(), zones, cfg, slow)).toEqual({});
+    expect(reviewCountsByPath(tmp(), cfg, slow)).toEqual({});
+  });
+
+  it('passes the remaining budget as each call timeout and trims the PR list', () => {
+    let now = 1_000_000;
+    vi.spyOn(Date, 'now').mockImplementation(() => now);
+    const inner = stub({ 1: [c('alice', 'src/pay/x.ts', long)], 2: [] });
+    const timeouts: number[] = [];
+    const calls: string[][] = [];
+    reviewCountsByPath(tmp(), cfg, (args, t) => { timeouts.push(t); now += 4_000; return inner(args); });
+    reviewCountsByPath(tmp(), cfg, (args) => { calls.push(args); return inner(args); });
+    expect(timeouts).toEqual([20_000, 16_000, 12_000, 8_000]);
+    expect(calls.some((a) => a.includes('--jq'))).toBe(true);
   });
 
   it('caches for 24 hours and refetches after', () => {
     const root = tmp();
     const calls: string[][] = [];
     const run = stub({ 1: [c('alice', 'src/pay/x.ts', long)] }, calls);
-    const first = reviewCounts(root, zones, cfg, run);
+    const first = reviewCountsByPath(root, cfg, run);
     expect(existsSync(join(root, '.understanding', 'local', 'reviews-cache.json'))).toBe(true);
     const n = calls.length;
-    expect(reviewCounts(root, zones, cfg, () => { throw new Error('must not run'); })).toEqual(first);
+    expect(reviewCountsByPath(root, cfg, () => { throw new Error('must not run'); })).toEqual(first);
     expect(calls.length).toBe(n);
     const cache = JSON.parse(readFileSync(join(root, '.understanding', 'local', 'reviews-cache.json'), 'utf8'));
     expect(Object.keys(cache).sort()).toEqual(['counts', 'fetchedAt']);
     vi.spyOn(Date, 'now').mockReturnValue(Date.now() + 25 * 3600_000);
-    reviewCounts(root, zones, cfg, run);
+    reviewCountsByPath(root, cfg, run);
     expect(calls.length).toBeGreaterThan(n);
   });
 });

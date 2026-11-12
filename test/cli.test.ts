@@ -3,7 +3,8 @@ import { existsSync, mkdirSync, mkdtempSync, writeFileSync, readFileSync, realpa
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { main } from '../src/cli';
+import { main, optionalReviews } from '../src/cli';
+import { DEFAULT_CONFIG } from '../src/config';
 import { emptyHome, fixture } from './helpers/fixture';
 
 async function run(cwd: string, argv: string[]) {
@@ -153,5 +154,37 @@ describe('cli record and handoff', () => {
     expect(JSON.parse(readFileSync(join(root, '.understanding', 'local', 'flags.json'), 'utf8'))).toEqual({
       agent: ['unreviewed-agent-code'], human: ['hard-to-verify'],
     });
+  });
+});
+
+describe('optionalReviews', () => {
+  const root = () => mkdtempSync(join(tmpdir(), 'umap-opt-'));
+
+  it('yields {} when gh is unavailable, throws, or UMAP_NO_GH=1, so map is unaffected', () => {
+    expect(optionalReviews(root(), DEFAULT_CONFIG, { ghAvailable: () => false })).toEqual({});
+    expect(optionalReviews(root(), DEFAULT_CONFIG, { ghAvailable: () => { throw new Error('boom'); } })).toEqual({});
+    expect(optionalReviews(root(), DEFAULT_CONFIG, { ghAvailable: () => true, run: () => { throw new Error('gh failed'); } })).toEqual({});
+    vi.stubEnv('UMAP_NO_GH', '1');
+    const probe = vi.fn(() => true);
+    expect(optionalReviews(root(), DEFAULT_CONFIG, { ghAvailable: probe })).toEqual({});
+    expect(probe).not.toHaveBeenCalled();
+  });
+
+  it('map still succeeds with a failing gh path', async () => {
+    const dir = fixture();
+    const r = await run(dir, ['map', '--no-report', '--json']);
+    expect(r.code).toBe(0);
+    expect(optionalReviews(dir, DEFAULT_CONFIG, { ghAvailable: () => true, run: () => { throw new Error('x'); } })).toEqual({});
+    expect(JSON.parse(r.stdout).zones.length).toBeGreaterThan(0);
+  });
+
+  it('a fresh cache is used without probing gh', () => {
+    const dir = root();
+    mkdirSync(join(dir, '.understanding', 'local'), { recursive: true });
+    writeFileSync(join(dir, '.understanding', 'local', 'reviews-cache.json'),
+      JSON.stringify({ fetchedAt: new Date().toISOString(), counts: { 'a.ts': { al: 1 } } }));
+    const probe = vi.fn(() => false);
+    expect(optionalReviews(dir, DEFAULT_CONFIG, { ghAvailable: probe })).toEqual({ 'a.ts': { al: 1 } });
+    expect(probe).not.toHaveBeenCalled();
   });
 });

@@ -13,6 +13,8 @@ import { buildZones, readFileEntries, writeZoneCache, zoneIndex } from './zones.
 export interface BuildOptions {
   now?: Date;
   reviews?: Record<string, Record<string, number>>;
+  /** PR review comment counts per file path and handle; folded into zone counts. */
+  reviewsByPath?: Record<string, Record<string, number>>;
   /** Where session logs are looked up for solo backfill. Defaults to the user's home directory. */
   homeDir?: string;
 }
@@ -38,6 +40,20 @@ function sharedShareByZone(
   }
   const out: Record<string, number> = {};
   for (const [z, n] of Object.entries(agent)) if (added[z] > 0) out[z] = Math.min(1, n / added[z]);
+  return out;
+}
+
+function foldReviews(
+  zones: Zone[], byZone: Record<string, Record<string, number>>, byPath: Record<string, Record<string, number>>,
+): Record<string, Record<string, number>> {
+  const out: Record<string, Record<string, number>> = {};
+  for (const [z, people] of Object.entries(byZone)) out[z] = { ...people };
+  const zoneOf = zoneIndex(zones);
+  for (const [path, people] of Object.entries(byPath)) {
+    const z = zoneOf.get(path);
+    if (!z) continue;
+    for (const [h, n] of Object.entries(people)) (out[z] ??= {})[h] = (out[z][h] ?? 0) + n;
+  }
   return out;
 }
 
@@ -76,7 +92,7 @@ export function buildMap(root: string, opts: BuildOptions = {}): MapResult {
     passes: readPasses(root, defaultRef),
     localPartials: readLocalPartials(root),
     fanIn: fanInByZone(root, files, zones, commits),
-    reviews: opts.reviews ?? {},
+    reviews: foldReviews(zones, opts.reviews ?? {}, opts.reviewsByPath ?? {}),
     flags: readFlags(root),
   });
 }
