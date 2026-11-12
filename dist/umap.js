@@ -4037,7 +4037,13 @@ var label2 = (s) => s[0].toUpperCase() + s.slice(1);
 function formatSummary(m, reportPath) {
   const c = m.counts;
   const counts = m.mode === "team" ? `Owned ${c.owned} \xB7 Fragile ${c.fragile} \xB7 Fading ${c.fading} \xB7 Dark ${c.dark} \xB7 Unknown ${c.unknown}` : `Owned ${c.owned} \xB7 Fading ${c.fading} \xB7 Dark ${c.dark} \xB7 Unknown ${c.unknown}`;
-  const lines = [`Understanding Map \u2014 ${m.zones.length} zones (${m.mode} mode)`, counts, ""];
+  const header = `Understanding Map \u2014 ${m.zones.length} zones (${m.mode} mode)`;
+  if (!m.zones.length) {
+    const empty = [header, "", "No tracked files yet \u2014 commit some code, then run map again."];
+    if (reportPath) empty.push(`Report: ${reportPath}`);
+    return empty.join("\n");
+  }
+  const lines = [header, counts, ""];
   if (m.top.length) {
     lines.push("Where understanding matters most:");
     m.top.forEach((z, i) => lines.push(`${String(i + 1).padStart(2)}. ${z.zone.id} \u2014 ${z.reason}`));

@@ -7,7 +7,13 @@ export function formatSummary(m: MapResult, reportPath: string | null): string {
   const counts = m.mode === 'team'
     ? `Owned ${c.owned} · Fragile ${c.fragile} · Fading ${c.fading} · Dark ${c.dark} · Unknown ${c.unknown}`
     : `Owned ${c.owned} · Fading ${c.fading} · Dark ${c.dark} · Unknown ${c.unknown}`;
-  const lines = [`Understanding Map — ${m.zones.length} zones (${m.mode} mode)`, counts, ''];
+  const header = `Understanding Map — ${m.zones.length} zones (${m.mode} mode)`;
+  if (!m.zones.length) {
+    const empty = [header, '', 'No tracked files yet — commit some code, then run map again.'];
+    if (reportPath) empty.push(`Report: ${reportPath}`);
+    return empty.join('\n');
+  }
+  const lines = [header, counts, ''];
   if (m.top.length) {
     lines.push('Where understanding matters most:');
     m.top.forEach((z, i) => lines.push(`${String(i + 1).padStart(2)}. ${z.zone.id} — ${z.reason}`));

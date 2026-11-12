@@ -120,6 +120,15 @@ describe('formatSummary', () => {
     expect(s).toContain('Scores are estimates from git history and sessions');
     expect(s).toContain('/understanding-map:learn');
   });
+
+  it('says there is nothing to map yet, without suggesting learn, when there are no zones', () => {
+    for (const root of [makeRepo([]), makeRepo([{ files: { 'dist/bundle.js': body('d') } }])]) {
+      const s = formatSummary(buildMap(root, { now: NOW, homeDir: emptyHome() }), null);
+      expect(s).toContain('No tracked files yet — commit some code, then run map again.');
+      expect(s).not.toContain('Next:');
+      expect(s).not.toContain('Nothing stands out');
+    }
+  });
 });
 
 describe('formatWho', () => {
