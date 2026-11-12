@@ -58,7 +58,10 @@ function renderHeader(m: MapResult): string {
 }
 
 /** Embedded data. Agent share appears only at zone level, never per person. */
-function reportData(m: MapResult, threshold: number) {
+/** Only links to a local visuals page (as visualHref makes them) are ever embedded. */
+const VISUAL_HREF = /^local\/visuals\/[a-z0-9-]+\.html$/;
+
+function reportData(m: MapResult, threshold: number, visuals: Record<string, string>) {
   const team = m.mode === 'team';
   return {
     mode: m.mode,
@@ -78,12 +81,14 @@ function reportData(m: MapResult, threshold: number) {
         people: listed.map((p) => ({ handle: p.handle, level: p.level, active: p.active, evidence: p.evidence })),
         understoodBy: team ? z.people.filter((p) => p.active && p.level >= threshold).map((p) => p.handle) : [],
         leftInactive: team ? z.people.filter((p) => !p.active).map((p) => p.handle) : [],
+        visual: Object.hasOwn(visuals, z.zone.id) && VISUAL_HREF.test(visuals[z.zone.id]) ? visuals[z.zone.id] : null,
       };
     }),
   };
 }
 
-export function renderReport(m: MapResult, opts: Partial<MethodSettings> = {}): string {
+/** `visuals`: zone id → fresh animation page relative to `.understanding/` (see freshVisuals). */
+export function renderReport(m: MapResult, opts: Partial<MethodSettings> & { visuals?: Record<string, string> } = {}): string {
   const settings: MethodSettings = {
     threshold: opts.threshold ?? DEFAULT_CONFIG.threshold,
     fadingFloor: opts.fadingFloor ?? DEFAULT_CONFIG.fadingFloor,
@@ -94,7 +99,7 @@ export function renderReport(m: MapResult, opts: Partial<MethodSettings> = {}): 
     __HEADER__: renderHeader(m),
     __TREEMAP__: renderTreemap(m.zones),
     __TABLE__: renderTable(m.zones),
-    __DATA__: safeJson(reportData(m, settings.threshold)),
+    __DATA__: safeJson(reportData(m, settings.threshold, opts.visuals ?? {})),
     __METHOD__: howEstimatesWork(m.mode, settings),
   };
   return REPORT_TEMPLATE.replace(/__(HEADER|TREEMAP|TABLE|DATA|METHOD)__/g, (k) => fill[k]);

@@ -12,7 +12,7 @@ import { handoffSet, markUnverifiable, recordResult, skipHandoff, type Grade } f
 import { runSetup } from './setup.js';
 import { repoLineCounter, StoryboardError } from './storyboard.js';
 import { checkStoryboard, renderVisual, type LiveZone } from './visual.js';
-import { checkFresh, readSavedVisual, saveVisual, visualFingerprint } from './visual-store.js';
+import { checkFresh, freshVisuals, readSavedVisual, saveVisual, visualFingerprint } from './visual-store.js';
 import { formatSummary, formatWho } from './terminal.js';
 import type { Config, MapResult, ZoneResult } from './types.js';
 
@@ -164,7 +164,9 @@ export const commands: Record<string, Command> = {
     let reportPath: string | null = null;
     if (!flags.has('--no-report')) {
       try {
-        reportPath = writeReport(root, renderReport(m, config));
+        let visuals: Record<string, string> = {};
+        try { visuals = freshVisuals(root, m.zones.map((z) => ({ id: z.zone.id, files: z.zone.files }))); } catch { /* no links */ }
+        reportPath = writeReport(root, renderReport(m, { ...config, visuals }));
       } catch (e) {
         err(`Could not write the HTML report: ${(e as Error).message.split('\n')[0]}`);
       }

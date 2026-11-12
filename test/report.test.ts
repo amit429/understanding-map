@@ -115,6 +115,21 @@ describe('renderReport', () => {
     expect(solo).not.toContain('Fragile');
   });
 
+  it('offers a copyable visualize command, and an animation link only for zones with a fresh visual', () => {
+    const html = renderReport(team, { visuals: { 'src/ui': 'local/visuals/src-ui-abc123.html' } });
+    expect(html).toContain("'/understanding-map:visualize '");
+    expect(html).toContain('Open animation');
+    const d = data(html);
+    expect(d.zones.find((z: { id: string }) => z.id === 'src/ui').visual).toBe('local/visuals/src-ui-abc123.html');
+    expect(d.zones.find((z: { id: string }) => z.id === 'src/core').visual).toBeNull();
+    expect(data(renderReport(team)).zones.every((z: { visual: unknown }) => z.visual === null)).toBe(true);
+  });
+
+  it('never embeds a visual link that is not a local visuals page', () => {
+    const d = data(renderReport(team, { visuals: { 'src/ui': 'javascript:alert(1)', docs: '../../etc/x.html', 'src/core': 'https://x.io/a.html' } }));
+    for (const z of d.zones) expect(z.visual).toBeNull();
+  });
+
   it('renders an empty map without throwing', () => {
     expect(renderReport(result('solo', []))).toContain('Scores are estimates');
   });

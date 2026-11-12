@@ -321,6 +321,23 @@ describe('cli visualize', () => {
     expect(unknown.code).toBe(1);
   });
 
+  it('map links the report to a fresh animation only', async () => {
+    const { root, file } = await setup();
+    const { visualSlug } = await import('../src/visual-store');
+    const reportData = () => {
+      const html = readFileSync(join(root, '.understanding', 'report.html'), 'utf8');
+      return JSON.parse(html.match(/<script type="application\/json" id="data">([\s\S]*?)<\/script>/)![1]);
+    };
+    await run(root, ['visualize', 'src/payments', '--storyboard', file]);
+    await run(root, ['map']);
+    const zone = (id: string) => reportData().zones.find((z: { id: string }) => z.id === id);
+    expect(zone('src/payments').visual).toBe(`local/visuals/${visualSlug('src/payments')}.html`);
+    expect(zone('src/api').visual).toBeNull();
+    writeFileSync(join(root, 'src/payments/stripe.ts'), 'changed\n');
+    await run(root, ['map']);
+    expect(zone('src/payments').visual).toBeNull();
+  });
+
   it('--cached reuses a fresh storyboard with live scene-1 data, and refuses a stale one', async () => {
     const { root, file } = await setup();
     const none = await run(root, ['visualize', 'src/payments', '--cached', '--json']);

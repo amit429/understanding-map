@@ -95,6 +95,7 @@ tbody tr:hover, tbody tr.sel { background: color-mix(in srgb, var(--accent) 12%,
 #panel h4 { margin: 14px 0 4px; font-size: 0.9rem; color: var(--muted); }
 #panel ul { margin: 0; padding-left: 20px; }
 .cmd { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 14px; }
+.cmd a { color: var(--accent); font-weight: 600; }
 .cmd code { font-family: var(--mono); background: var(--bg); border: 1px solid var(--border); border-radius: 6px; padding: 4px 8px; word-break: break-all; }
 .method { padding-left: 20px; color: var(--muted); font-size: 0.88rem; }
 .method li { margin: 4px 0; }
@@ -171,7 +172,16 @@ __METHOD__
       panel.appendChild(list(z.flags));
     }
     if (z.agentShare > 0) panel.appendChild(el('p', 'About ' + Math.max(1, Math.round(z.agentShare * 100)) + '% of this zone was written by agents.', 'note'));
-    var cmd = '/understanding-map:learn ' + z.id;
+    panel.appendChild(cmdRow('/understanding-map:learn ' + z.id));
+    var vis = cmdRow('/understanding-map:visualize ' + z.id);
+    if (z.visual) {
+      var a = el('a', 'Open animation');
+      a.href = z.visual;
+      vis.appendChild(a);
+    }
+    panel.appendChild(vis);
+  }
+  function cmdRow(cmd) {
     var row = el('div', undefined, 'cmd');
     row.appendChild(el('code', cmd));
     var btn = el('button', 'Copy');
@@ -181,7 +191,7 @@ __METHOD__
       catch (e) { btn.textContent = 'Copy failed'; }
     });
     row.appendChild(btn);
-    panel.appendChild(row);
+    return row;
   }
   document.querySelectorAll('[data-id]').forEach(function (n) {
     n.addEventListener('click', function () { show(n.getAttribute('data-id')); });
