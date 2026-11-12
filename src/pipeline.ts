@@ -86,7 +86,8 @@ export function buildMap(root: string, opts: BuildOptions = {}): MapResult {
   if (solo) {
     // Sessions the live hook already logged would be double-counted by the backfill.
     const live = new Set(edits.map((e) => e.session));
-    edits.push(...backfillSessionEdits(root, opts.homeDir ?? homedir()).filter((e) => !live.has(e.session)));
+    // A loop, not push(...spread): a large backfill would overflow the argument limit.
+    for (const e of backfillSessionEdits(root, opts.homeDir ?? homedir())) if (!live.has(e.session)) edits.push(e);
   }
   const myEmail = currentEmail(root);
   const me = myEmail ? handleFor(myEmail, config) : 'me';
