@@ -1,5 +1,10 @@
 {
   "name": "understanding-map",
   "version": "0.1.0",
-  "description": "Maps which parts of your codebase you still understand, so AI-written code does not leave you with dark zones."
+  "description": "Find the code nobody on your team understands any more (comprehension debt from AI-written code) and learn it back through short, verified sessions.",
+  "author": { "name": "amit429", "url": "https://github.com/amit429" },
+  "homepage": "https://github.com/amit429/understanding-map",
+  "repository": "https://github.com/amit429/understanding-map",
+  "license": "MIT",
+  "keywords": ["comprehension-debt", "code-understanding", "onboarding", "bus-factor", "learning", "ai-generated-code", "code-review"]
 }

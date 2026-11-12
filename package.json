@@ -8,8 +8,13 @@
     "build": "node scripts/build.mjs",
     "typecheck": "tsc --noEmit"
   },
-  "engines": { "node": ">=18" },
-  "dependencies": { "d3-hierarchy": "^3.1.2", "picomatch": "^4.0.2" },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "d3-hierarchy": "^3.1.2",
+    "picomatch": "^4.0.2"
+  },
   "devDependencies": {
     "@types/d3-hierarchy": "^3.1.7",
     "@types/node": "^20.14.0",
@@ -17,5 +22,10 @@
     "esbuild": "^0.24.0",
     "typescript": "^5.6.0",
     "vitest": "^2.1.0"
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/amit429/understanding-map.git"
   }
 }

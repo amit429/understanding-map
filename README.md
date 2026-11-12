@@ -1,74 +1,201 @@
 # Understanding Map
 
-A Claude Code plugin that shows which parts of your repository no human understands well enough to explain, debug or safely change, and turns them back into understood code through 5-minute learning sessions.
+**Find the code nobody on your team understands any more, and learn it back in five minutes at a time.**
+
+A Claude Code plugin for the age of AI-written code. It maps which parts of your repository no human could confidently explain, debug or change. It ranks them by how much damage they could do, and turns them back into understood code through short, verified learning sessions.
+
+Example `/understanding-map:map` output (illustrative):
+
+```
+Understanding Map — 44 zones (solo mode)
+Owned 3 · Fading 6 · Dark 31 · Unknown 4
+
+Where understanding matters most:
+ 1. lib/router — Dark · 33 files import it · 6 fixes in the last 90 days
+ 2. lib/reply  — Dark · 28 files import it · 8 fixes in the last 90 days
+ 3. lib/hooks  — Fading · 45 files import it · 7 fixes in the last 90 days
+ …
+Report: .understanding/report.html
+Next: /understanding-map:learn
+```
 
 ## Why
 
-Agents now write a large share of the code in many repositories, and it gets merged faster than anyone can understand it. That gap is **comprehension debt**. Git blame no longer measures it: when an agent commits under your name, you look like the expert on code you may never have read.
+Agents now write much of the code that gets merged, often faster than anyone reads it. The gap between the code you have and the code anyone understands is **comprehension debt**. Git blame no longer measures it: when an agent commits under your name, you look like the expert on code you may never have read.
 
-Understanding Map does two things together:
+Understanding Map works in a loop: **see the map → learn a zone → the map updates.**
 
-1. **Map.** It ranks the zones of your repository (groups of files, by default one per directory) by how little they are understood and how much damage they could do: Dark, Fading, Fragile, Owned or Unknown.
-2. **Teach.** A short session walks you through one zone and asks a few questions about it. Pass, and the map updates.
-
-A third piece stops new debt piling up: after an agent makes a large change, a one-line, non-blocking nudge offers a 60-second handoff check.
-
-The map is computed by a deterministic scanner from git history, the plugin's own records and the code structure. It makes **no LLM calls**. Claude tokens are spent only when you run a learning session or handoff check, and only on one zone at a time.
+---
 
 ## Install
 
-Requirements: Node 18 or later, and git. The engine ships prebuilt in `dist/umap.js`, so there is no install step.
+**Requirements:** Claude Code, Node.js 18+, git. The engine ships prebuilt, so there is nothing else to install.
 
-To try it locally:
+In Claude Code:
 
-```sh
+```
+/plugin marketplace add amit429/understanding-map
+/plugin install understanding-map@understanding-map
+```
+
+Or from a terminal:
+
+```bash
+claude plugin marketplace add amit429/understanding-map
+```
+
+```bash
+claude plugin install understanding-map@understanding-map
+```
+
+To try a local checkout without installing:
+
+```bash
 claude --plugin-dir /path/to/understanding-map
 ```
 
-Marketplace installation will follow.
+## Quick start (2 minutes)
+
+Open Claude Code inside any git repository and run:
+
+| Step | Command | What happens |
+|---|---|---|
+| 1 | `/understanding-map:setup` | Choose **solo** (private, nothing shared) or **team** (share progress through git), and optionally name your critical paths. |
+| 2 | `/understanding-map:map` | Scans git history and the code, then prints the top 10 danger zones and writes `.understanding/report.html`. Open it in a browser for the treemap. |
+| 3 | `/understanding-map:learn` | A 5-minute session on the most dangerous zone: a short tour, then 2–3 questions you answer in your own words. Pass, and the zone turns from Dark to Owned. |
+
+After that, keep working as usual. When an agent changes 50+ lines, you'll see a one-line nudge:
+
+```
+Agents changed ~180 lines in 3 zones since your last check. Run /understanding-map:handoff for a 60-second check.
+```
+
+It never blocks and is always skippable.
 
 ## Commands
 
-| Command | What it does |
+| Command | Use it to |
 |---|---|
-| `/understanding-map:setup` | Choose solo or team mode and, optionally, which paths are critical. Also runs on first use. |
-| `/understanding-map:map` | Scans the repository, prints a summary and the top 10 danger zones, and writes `.understanding/report.html`. |
-| `/understanding-map:learn [zone or path]` | A 5-minute session: a tour of the zone, then 2–3 questions you answer in your own words. Defaults to the top danger zone. |
-| `/understanding-map:handoff` | A 60-second check on what agents changed since your last check. Always skippable. |
-| `/understanding-map:who <path>` | Who understands the zone containing this path, with the evidence, or "nobody". |
+| `/understanding-map:setup` | Pick solo or team mode and critical paths. Re-run any time to switch. |
+| `/understanding-map:map` | See the map, the danger ranking and the HTML report. |
+| `/understanding-map:learn [zone or path]` | Run a 5-minute learning session. With no argument it picks the top danger zone; `/understanding-map:learn src/payments` targets one. |
+| `/understanding-map:handoff` | Run a 60-second check on what agents changed since your last check. |
+| `/understanding-map:who <path>` | See who understands the zone containing a file, and the evidence. |
 
-Every question is checked against the code by a separate answer-key checker before you see it. If fewer than two questions can be confirmed, you get the tour only, nothing is recorded, and the map marks the zone "hard to verify".
+You can also just ask, for example "which parts of this repo does nobody understand?" or "teach me the auth code". The matching skill loads on its own.
 
-## Solo and team
+## Reading the map
 
-Everything lives in `.understanding/` at the repository root.
+Each **zone** is a group of files, by default one folder. Very large folders are split into numbered chunks such as `lib#1`, and tiny folders merge into their parent.
 
-- **Solo:** all of `.understanding/` is ignored by git and stays on your machine.
-- **Team:** you commit `.understanding/config.json`, `.understanding/.gitignore`, `.understanding/events/` (passes only) and `.understanding/agent-share/` (anonymous per-zone totals) with your normal commits. Setup adds `merge=union` rules to `.gitattributes` so these append-only files merge cleanly. Everyone runs the same commands; a lead on the default branch sees everything that has been merged.
+| State | Meaning |
+|---|---|
+| 🟢 **Owned** | At least one active person (2+ in team mode) understands it, at level 60 or above. |
+| 🟠 **Fragile** | Exactly one person understands it. Team mode only: this is your bus-factor risk. |
+| 🟡 **Fading** | Someone understood it once, but time or changes have worn that down. |
+| 🔴 **Dark** | Nobody understands it, usually because agents wrote it or the people who knew it have left. |
+| ⚪ **Unknown** | Not enough evidence either way. This is not a bad sign. |
 
-The plugin **never makes commits** and never writes to git.
+The **danger rank** combines how dark a zone is with how critical it is: how many files import it, how often it changes, how many recent fixes touched it, its size, and whether you tagged it critical.
+
+**Every level is an estimate, shown with its evidence**, for example "about 80% of this zone was written by agents; last human edit 7 months ago". Treat the map as a place to start a conversation, not a verdict. The report has a "How estimates work" section with the exact weights.
+
+## How learning sessions stay honest
+
+- **Grounded:** the tour and questions come only from the code, with `file:line` references.
+- **Verified:** a separate read-only checker agent re-derives every answer key from the source before you see the question. If fewer than two questions can be confirmed, you get the tour only and the zone is marked "hard to verify". The plugin never quizzes you on something it can't back up.
+- **Fair:** each answer is graded pass, partial or miss with an explanation. Two or more passes and no misses counts as a pass. A partial never lowers your level.
+- **Low pressure:** stop at any time and nothing is recorded.
+
+## Solo and team mode
+
+Everything lives in `.understanding/` at the root of your repo.
+
+**Solo:** all of `.understanding/` is ignored by git and never leaves your machine.
+
+**Team:** commit these with your normal commits; the plugin itself never commits:
+
+```
+.understanding/config.json
+.understanding/.gitignore
+.understanding/events/        ← passed sessions only
+.understanding/agent-share/   ← anonymous per-zone totals
+```
+
+Setup adds `merge=union` rules to `.gitattributes`, so these append-only files merge without conflicts. Anyone on the default branch sees the merged team view: which zones only one person understands, which nobody does, and who to ask.
 
 ## Privacy
 
-- **No surveillance.** No leaderboards and no per-person scores across the team. You can see *who understands a zone* (the bus-factor view), never *who failed*.
-- **Failed attempts are never shared.** Shared files hold only passed sessions and handoff checks. Partial and missed attempts, the agent-edit log and flags stay in `.understanding/local/`, which is always ignored by git.
-- **Agent-written share is never pinned on a person.** It is shared only as anonymous zone totals (zone, line count and ISO week, with no author, commit id or exact time), written under a random machine id that is not derived from your identity. The plugin never shows how much of a given person's code agents wrote.
-- **No emails in shared files.** People appear by handle (the part of the email before the @, or a name set in config).
-- **No network by default.** The map, the hooks and the HTML report make no network calls. The one exception is the optional PR review signal below, which is off unless you turn it on.
-- **No nagging.** Hooks never block and never force a quiz. The handoff nudge stays silent below 50 changed lines (`handoff.minLines`) and can be turned off with `handoff.enabled: false` in `.understanding/config.json`.
+- **No surveillance.** No leaderboards, and no list of who failed. You can see *who understands a zone*, never *who failed* one.
+- **Failed attempts never leave your machine.** Only passes are shared.
+- **AI use is never pinned on a person.** Agent-written code is shared only as anonymous zone totals (zone, line count, ISO week), with no author, no commit and no time, under a random machine id.
+- **No emails in shared files.** People appear by handle, the part of the email before the @.
+- **No network by default.** The map, the hooks and the report make no network calls. The optional GitHub review signal is off unless you turn it on.
+- **No AI calls for the map.** It's computed deterministically from git and your code. Claude tokens are spent only on learning sessions and handoff checks.
 
-## Optional: PR review signal
+## Configuration
 
-Substantive pull request review comments can count as a small raise in understanding. This is **off by default**. To turn it on, add `"githubReviews": true` to `.understanding/config.json`. It needs the GitHub CLI (`gh`) installed and authenticated; set `UMAP_NO_GH=1` to switch it off for one run.
+`.understanding/config.json`. Every key is optional.
 
-When it is on, `/understanding-map:map` uses `gh` to fetch the review comments of the last 50 merged pull requests of the repository's GitHub remote (within a 20-second budget) and caches the counts for 24 hours in `.understanding/local/`. Comments shorter than 20 characters and approvals without comments count for nothing. The other commands only read that cache.
-
-Reviewers appear by GitHub login, so a review counts only when the login belongs to someone in the history: either their lowercased login equals their handle, or you map it in config. The `handles` setting maps both emails and GitHub logins to handles:
-
-```json
-{ "githubReviews": true, "handles": { "priya@corp.io": "priya", "priya-gh": "priya" } }
+```jsonc
+{
+  "mode": "solo",                         // or "team"
+  "critical": ["src/payments/**"],        // tagged critical, ranks higher
+  "exclude": ["generated/**"],            // extra paths to ignore
+  "zones": { "billing": ["src/billing/**", "lib/stripe*.ts"] },  // custom zones
+  "threshold": 60,                        // level counted as "understands"
+  "fadingFloor": 30,                      // below this, Dark rather than Fading
+  "activeDays": 90,                       // team: inactive after this many days
+  "halfLifeDays": 180,                    // understanding halves over this many days
+  "historyDays": 730,                     // how much git history to read
+  "handoff": { "enabled": true, "minLines": 50 },
+  "handles": { "priya@corp.io": "priya", "priya-gh": "priya" },
+  "githubReviews": false                  // opt-in PR review signal (needs gh)
+}
 ```
 
-## Scores are estimates
+**Optional PR review signal.** Set `"githubReviews": true` and have the GitHub CLI (`gh`) logged in. `map` then counts substantive review comments (20+ characters) from the last 50 merged PRs as a small raise in understanding, within a 20-second budget, cached for 24 hours. A reviewer counts only if their GitHub login matches a known handle or is mapped in `handles`. `UMAP_NO_GH=1` turns it off for one run.
 
-Every level and state is an **estimate** from git history, agent-edit records and sessions, and is always shown with its evidence, for example "82% of lines written by agents; last human edit 7 months ago; nobody has passed a session here". Zones without enough evidence show as **Unknown**, not Dark. Treat the map as a starting point for a conversation, not a verdict.
+## Troubleshooting
+
+| Symptom | Fix |
+|---|---|
+| "Understanding Map needs a git repository" | Run it inside a git repo with at least one commit. |
+| "No tracked files yet" | Commit some code, then run `map` again. |
+| Everything shows Dark | That's expected on code you didn't write. In solo mode the map measures *your* understanding. Run `/understanding-map:learn`. |
+| No handoff nudge | Run `setup` first. The nudge appears only after 50+ agent-changed lines (`handoff.minLines`). |
+| Hooks do nothing | Make sure `node` (18+) is on your PATH. The hooks stay silent without it. |
+| Zone names like `lib#2` | The folder was larger than 3,000 lines and was split. Name it with `zones` in config. |
+
+## How it works
+
+The plugin has two halves:
+
+- **A deterministic engine.** About 2,600 lines of TypeScript bundled into `dist/umap.js`. It does the git analysis, zoning, scoring and storage, and makes no model calls.
+- **Model-driven playbooks.** Five skills and one checker agent handle explaining, asking and grading.
+
+Two hooks record agent edits and show the handoff nudge. For a full walkthrough of how a Claude Code plugin is put together, using this one as the example, read **[docs/how-it-works.md](docs/how-it-works.md)**. The design spec is in [docs/specs/](docs/specs/).
+
+## Development
+
+```bash
+npm install
+```
+
+```bash
+npm test
+```
+
+```bash
+npm run build
+```
+
+```bash
+claude plugin validate .
+```
+
+Run `npm run build` after changing `src/`, and commit the rebuilt `dist/umap.js`. The opt-in performance test (`UMAP_E2E=1 npm test`) clones fastify and checks that `map` finishes under 2 minutes; it takes about 0.2 s.
+
+## License
+
+[MIT](LICENSE)

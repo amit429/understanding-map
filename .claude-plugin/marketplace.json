@@ -1,0 +1,15 @@
+{
+  "name": "understanding-map",
+  "description": "Understanding Map: a Claude Code plugin that maps comprehension debt in AI-written codebases and pays it down with short learning sessions.",
+  "owner": { "name": "amit429", "url": "https://github.com/amit429" },
+  "plugins": [
+    {
+      "name": "understanding-map",
+      "source": "./",
+      "description": "Find the code nobody on your team understands any more and learn it back through short, verified sessions.",
+      "version": "0.1.0",
+      "category": "productivity",
+      "tags": ["comprehension-debt", "learning", "code-understanding"]
+    }
+  ]
+}
