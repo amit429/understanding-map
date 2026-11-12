@@ -36,9 +36,27 @@ describe('buildMap', () => {
 describe('buildMap reviews', () => {
   it('folds per-path review counts into zone review evidence', () => {
     const root = fixture();
-    const m = buildMap(root, { now: NOW, homeDir: emptyHome(), reviewsByPath: { 'human/h.ts': { zed: 3 }, 'nowhere.ts': { zed: 9 } } });
-    const zed = m.zones.find((z) => z.zone.id === 'human')!.people.find((p) => p.handle === 'zed');
-    expect(zed?.evidence.some((e) => e.kind === 'review' && e.text.includes('3'))).toBe(true);
+    const m = buildMap(root, { now: NOW, homeDir: emptyHome(), reviewsByPath: { 'human/h.ts': { Dev: 3 }, 'nowhere.ts': { Dev: 9 } } });
+    const dev = m.zones.find((z) => z.zone.id === 'human')!.people.find((p) => p.handle === 'dev');
+    expect(dev?.evidence.some((e) => e.kind === 'review' && e.text.includes('3'))).toBe(true);
+  });
+
+  it('counts a reviewer only when their login maps to a handle or matches a committer', () => {
+    const root = makeRepo([{ files: { 'src/auth/a.ts': body('a') }, email: 'alice@example.com', date: daysAgo(5) }]);
+    gitIn(root, ['config', 'user.email', 'alice@example.com']);
+    const reviewsByPath = { 'src/auth/a.ts': { 'alice-gh': 3, constructor: 2 } };
+    const zone = (m: ReturnType<typeof buildMap>) => m.zones.find((z) => z.zone.id === 'src/auth')!;
+    const plain = zone(buildMap(root, { now: NOW, homeDir: emptyHome() }));
+    const unmapped = zone(buildMap(root, { now: NOW, homeDir: emptyHome(), reviewsByPath }));
+    expect(unmapped.people.map((p) => p.handle)).toEqual(['alice']);
+    expect(unmapped.state).toBe(plain.state);
+    expect(unmapped.people[0].evidence.some((e) => e.kind === 'review')).toBe(false);
+
+    mkdirSync(join(root, '.understanding'), { recursive: true });
+    writeFileSync(join(root, '.understanding', 'config.json'), JSON.stringify({ handles: { 'alice-gh': 'alice' } }));
+    const mapped = zone(buildMap(root, { now: NOW, homeDir: emptyHome(), reviewsByPath }));
+    expect(mapped.people.map((p) => p.handle)).toEqual(['alice']);
+    expect(mapped.people[0].evidence.find((e) => e.kind === 'review')?.text).toBe('reviewed 3 changes here');
   });
 });
 

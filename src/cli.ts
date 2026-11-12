@@ -78,7 +78,7 @@ export function optionalReviews(root: string, config: Config, deps: ReviewDeps =
     const cached = readReviewCache(root);
     if (cached) return cached;
     if (!deps.ghAvailable(root)) return {};
-    return reviewCountsByPath(root, config, deps.run);
+    return reviewCountsByPath(root, deps.run);
   } catch {
     return {};
   }

@@ -4,7 +4,7 @@ import { dirname, join } from 'node:path';
 import { umDir } from './config.js';
 import type { Config } from './types.js';
 
-/** path → reviewer handle → substantive review comments. */
+/** path → reviewer GitHub login → substantive review comments. Logins are mapped to handles in the pipeline. */
 export type PathCounts = Record<string, Record<string, number>>;
 type Counts = PathCounts;
 
@@ -52,12 +52,12 @@ function writeCache(root: string, counts: Counts): void {
 }
 
 /**
- * Substantive PR review comments (body of at least 20 characters) per file path and reviewer handle, from the last
+ * Substantive PR review comments (body of at least 20 characters) per file path and reviewer login, from the last
  * 50 merged PRs. Approvals without comments count for nothing. Each gh call gets the remaining share of the 20 s
  * budget as its timeout; any failure or running out of budget yields {}.
  */
 export function reviewCountsByPath(
-  root: string, config: Config,
+  root: string,
   run: (args: string[], timeoutMs: number) => string = (args, t) => ghIn(root, args, t),
 ): PathCounts {
   const cached = readReviewCache(root);
@@ -79,9 +79,8 @@ export function reviewCountsByPath(
       for (const c of comments) {
         const login = c.user?.login;
         if (!c.path || !login || (c.body ?? '').trim().length < MIN_COMMENT_CHARS) continue;
-        const handle = config.handles[login] ?? login.toLowerCase();
         counts[c.path] ??= {};
-        counts[c.path][handle] = (counts[c.path][handle] ?? 0) + 1;
+        counts[c.path][login] = (counts[c.path][login] ?? 0) + 1;
       }
     }
     if (Date.now() - started > BUDGET_MS) return {};

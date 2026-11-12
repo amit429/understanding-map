@@ -8,7 +8,7 @@ import { commitsWithNotes, currentEmail, defaultBranchRef, listTrackedFiles, rea
 import { handleFor } from './identity.js';
 import { fanInByZone } from './imports.js';
 import { scoreMap } from './scoring.js';
-import type { Commit, MapResult, Zone } from './types.js';
+import type { Commit, Config, MapResult, Zone } from './types.js';
 import { buildZones, readFileEntries, writeZoneCache, zoneIndex } from './zones.js';
 
 export interface BuildOptions {
@@ -47,16 +47,26 @@ function sharedShareByZone(
   return out;
 }
 
+/**
+ * Adds per-path review counts, keyed by GitHub login, to the zone-level counts. A login counts only when
+ * `config.handles` maps it, or when its handle is one of the committers in the history window; anything else is
+ * ignored, so a reviewer never appears as a phantom person next to their own email handle.
+ */
 function foldReviews(
   zones: Zone[], byZone: Record<string, Record<string, number>>, byPath: Record<string, Record<string, number>>,
+  config: Config, committers: Set<string>,
 ): Record<string, Record<string, number>> {
   const out: Record<string, Record<string, number>> = {};
   for (const [z, people] of Object.entries(byZone)) out[z] = { ...people };
   const zoneOf = zoneIndex(zones);
-  for (const [path, people] of Object.entries(byPath)) {
+  for (const [path, logins] of Object.entries(byPath)) {
     const z = zoneOf.get(path);
     if (!z) continue;
-    for (const [h, n] of Object.entries(people)) (out[z] ??= {})[h] = (out[z][h] ?? 0) + n;
+    for (const [login, n] of Object.entries(logins)) {
+      const h = handleFor(login, config);
+      if (!Object.hasOwn(config.handles, login) && !committers.has(h)) continue;
+      (out[z] ??= {})[h] = (out[z][h] ?? 0) + n;
+    }
   }
   return out;
 }
@@ -96,7 +106,8 @@ export function buildMap(root: string, opts: BuildOptions = {}): MapResult {
     passes: readPasses(root, defaultRef),
     localPartials: readLocalPartials(root),
     fanIn: fanInByZone(root, files, zones, commits),
-    reviews: foldReviews(zones, opts.reviews ?? {}, opts.reviewsByPath ?? cachedReviews(root, config)),
+    reviews: foldReviews(zones, opts.reviews ?? {}, opts.reviewsByPath ?? cachedReviews(root, config), config,
+      new Set(commits.map((c) => handleFor(c.email, config)))),
     flags: readFlags(root),
   });
 }

@@ -2653,7 +2653,7 @@ function writeCache(root, counts) {
   } catch {
   }
 }
-function reviewCountsByPath(root, config, run = (args, t) => ghIn(root, args, t)) {
+function reviewCountsByPath(root, run = (args, t) => ghIn(root, args, t)) {
   const cached = readReviewCache(root);
   if (cached) return cached;
   const started = Date.now();
@@ -2671,9 +2671,8 @@ function reviewCountsByPath(root, config, run = (args, t) => ghIn(root, args, t)
       for (const c of comments) {
         const login = c.user?.login;
         if (!c.path || !login || (c.body ?? "").trim().length < MIN_COMMENT_CHARS) continue;
-        const handle = config.handles[login] ?? login.toLowerCase();
         counts[c.path] ??= {};
-        counts[c.path][handle] = (counts[c.path][handle] ?? 0) + 1;
+        counts[c.path][login] = (counts[c.path][login] ?? 0) + 1;
       }
     }
     if (Date.now() - started > BUDGET_MS) return {};
@@ -3189,14 +3188,18 @@ function sharedShareByZone(root, zones, commits, now, historyDays, defaultRef) {
   for (const [z, n] of Object.entries(agent)) if (added[z] > 0) out2[z] = Math.min(1, n / added[z]);
   return out2;
 }
-function foldReviews(zones, byZone, byPath2) {
+function foldReviews(zones, byZone, byPath2, config, committers) {
   const out2 = {};
   for (const [z, people] of Object.entries(byZone)) out2[z] = { ...people };
   const zoneOf = zoneIndex(zones);
-  for (const [path, people] of Object.entries(byPath2)) {
+  for (const [path, logins] of Object.entries(byPath2)) {
     const z = zoneOf.get(path);
     if (!z) continue;
-    for (const [h, n] of Object.entries(people)) (out2[z] ??= {})[h] = (out2[z][h] ?? 0) + n;
+    for (const [login, n] of Object.entries(logins)) {
+      const h = handleFor(login, config);
+      if (!Object.hasOwn(config.handles, login) && !committers.has(h)) continue;
+      (out2[z] ??= {})[h] = (out2[z][h] ?? 0) + n;
+    }
   }
   return out2;
 }
@@ -3236,7 +3239,13 @@ function buildMap(root, opts = {}) {
     passes: readPasses(root, defaultRef),
     localPartials: readLocalPartials(root),
     fanIn: fanInByZone(root, files, zones, commits),
-    reviews: foldReviews(zones, opts.reviews ?? {}, opts.reviewsByPath ?? cachedReviews(root, config)),
+    reviews: foldReviews(
+      zones,
+      opts.reviews ?? {},
+      opts.reviewsByPath ?? cachedReviews(root, config),
+      config,
+      new Set(commits.map((c) => handleFor(c.email, config)))
+    ),
     flags: readFlags(root)
   });
 }
@@ -4060,7 +4069,7 @@ function optionalReviews(root, config, deps = { ghAvailable }) {
     const cached = readReviewCache(root);
     if (cached) return cached;
     if (!deps.ghAvailable(root)) return {};
-    return reviewCountsByPath(root, config, deps.run);
+    return reviewCountsByPath(root, deps.run);
   } catch {
     return {};
   }
