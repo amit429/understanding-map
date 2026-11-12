@@ -12,10 +12,12 @@ The user's argument: `$ARGUMENTS`
 
 Claude Code shows `Base directory for this skill: <path>` when this skill loads. Call that path `<base>` and run every engine command as `node "<base>/../../dist/umap.js" <cmd>` from the user's repository. If no base directory was shown, use `node "${CLAUDE_PLUGIN_ROOT}/dist/umap.js" <cmd>` instead.
 
+Always put zone ids and paths in double quotes, because some contain shell characters: for example `who "(root)"`.
+
 ## Steps
 
 1. If no path was given, ask which file or directory they mean. A zone id from the map works too.
-2. Run `node "<base>/../../dist/umap.js" who <path>`.
+2. Run `node "<base>/../../dist/umap.js" who "<path>"`.
 3. Show the output verbatim in a code block. It lists who understands the zone (or "nobody"), the evidence behind each level, and anyone inactive separately.
 4. Add at most one plain sentence after it, such as: if nobody understands the zone, `/understanding-map:learn <path>` is a 5-minute way to change that.
 

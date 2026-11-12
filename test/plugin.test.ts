@@ -65,6 +65,17 @@ describe('skills', () => {
     expect(text).toContain('record --kind session');
   });
 
+  it.each(['learn', 'handoff'])('%s treats anything but an explicit "confirmed": true as unconfirmed', (name) => {
+    const text = skillText(name);
+    expect(text).toContain('`"confirmed": true`');
+    expect(text).toMatch(/missing id, malformed or non-JSON output, or an error/);
+  });
+
+  it.each(SKILLS)('%s quotes zone ids and paths in every engine command', (name) => {
+    const text = skillText(name);
+    expect(text).not.toMatch(/--zones? <|umap\.js" (zone|who) </);
+  });
+
   it('handoff verifies questions, records handoffs and supports skipping', () => {
     const text = skillText('handoff');
     expect(text).toContain('answer-key-checker');

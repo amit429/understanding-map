@@ -11,6 +11,8 @@ A 60-second check on what agents changed since the last check: a plain summary, 
 
 Claude Code shows `Base directory for this skill: <path>` when this skill loads. Call that path `<base>` and run every engine command as `node "<base>/../../dist/umap.js" <cmd>` from the user's repository. If no base directory was shown, use `node "${CLAUDE_PLUGIN_ROOT}/dist/umap.js" <cmd>` instead.
 
+Always put zone ids and paths in double quotes, because some contain shell characters: for example `--zone "(root)"`.
+
 ## 1. What changed
 
 Run `node "<base>/../../dist/umap.js" handoff-set --json`. It prints `{"totalLines": …, "zones": [{"zone", "lines", "files"}], "edits": [{"file", "ranges", …}]}`.
@@ -32,9 +34,9 @@ Draft two questions about the changed code, each with an answer key and `file:li
 - **q1 Predict:** "Given this input, what happens now, and where?"
 - **q2 Break:** "If this changed, what would fail, and why?"
 
-Never show an answer key before the user answers. Dispatch the `answer-key-checker` subagent (listed as `understanding-map:answer-key-checker`) with each question's id, type, text, answer key and references, plus the repository root. It returns `[{id, confirmed, reason}]`. Regenerate each unconfirmed question **once** and check only the new ones.
+Never show an answer key before the user answers. Dispatch the `answer-key-checker` subagent (listed as `understanding-map:answer-key-checker`) with each question's id, type, text, answer key and references, plus the repository root. It returns `[{id, confirmed, reason}]`. A question counts as confirmed only when the checker returns it with an explicit `"confirmed": true`; anything else (a missing id, malformed or non-JSON output, or an error) counts as unconfirmed. Regenerate each unconfirmed question **once** and check only the new ones.
 
-If fewer than 2 are confirmed after that, tell the user these changes are too unclear to quiz on yet, so the summary is the check today. For each zone in the set, run `node "<base>/../../dist/umap.js" unverifiable --zone <zone id>`, and record nothing else. The changes stay in the not-yet-checked set; the user can clear it with a skip if they prefer. Stop.
+If fewer than 2 are confirmed after that, tell the user these changes are too unclear to quiz on yet, so the summary is the check today. For each zone in the set, run `node "<base>/../../dist/umap.js" unverifiable --zone "<zone id>"`, and record nothing else. The changes stay in the not-yet-checked set; the user can clear it with a skip if they prefer. Stop.
 
 ## 4. Ask, one at a time
 

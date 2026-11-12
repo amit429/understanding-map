@@ -14,11 +14,13 @@ The user's argument (may be empty): `$ARGUMENTS`
 
 Claude Code shows `Base directory for this skill: <path>` when this skill loads. Call that path `<base>` and run every engine command as `node "<base>/../../dist/umap.js" <cmd>` from the user's repository. If no base directory was shown, use `node "${CLAUDE_PLUGIN_ROOT}/dist/umap.js" <cmd>` instead.
 
+Always put zone ids and paths in double quotes, because some contain shell characters: for example `--zones "(root)"`, `zone "(root)"`, `--zone "(root)"`.
+
 ## 1. Pick
 
 First run `node "<base>/../../dist/umap.js" status --json`. If it reports `"setUp": false`, ask the setup skill's two questions (`/understanding-map:setup`) and run setup, then continue.
 
-- With an argument: `node "<base>/../../dist/umap.js" zone <argument> --json`. It prints the zone: `zone.id`, `zone.files`, `state`, `reason`.
+- With an argument: `node "<base>/../../dist/umap.js" zone "<argument>" --json`. It prints the zone: `zone.id`, `zone.files`, `state`, `reason`.
 - Without one: `node "<base>/../../dist/umap.js" pick --json`. It prints `{"zone": …, "why": …}`. If `zone` is `null`, show `why`, say they can name any zone or path, and stop.
 
 Tell the user in one line which zone and why, using the engine's `reason` or `why` (for example "payments — Dark · 14 files import it · tagged critical"). Do not list people or their evidence. Mention they can say "stop" at any time.
@@ -46,11 +48,11 @@ Each question must have one defensible answer that the code shows, answerable af
 
 ## 4. Check with answer-key-checker (mandatory)
 
-Dispatch the `answer-key-checker` subagent (listed as `understanding-map:answer-key-checker`) with each question's id, type, question text, answer key and `file:line` references, plus the repository root. Send only those; do not send the tour. It returns `[{id, confirmed, reason}]`. You can show the tour and dispatch the checker in the same reply, so the check runs while the user reads.
+Dispatch the `answer-key-checker` subagent (listed as `understanding-map:answer-key-checker`) with each question's id, type, question text, answer key and `file:line` references, plus the repository root. Send only those; do not send the tour. It returns `[{id, confirmed, reason}]`. A question counts as confirmed only when the checker returns it with an explicit `"confirmed": true`; anything else (a missing id, malformed or non-JSON output, or an error) counts as unconfirmed. You can show the tour and dispatch the checker in the same reply, so the check runs while the user reads.
 
 - Regenerate each unconfirmed question **once**, using the checker's reason, and send only the new ones back to the checker.
 - If at least 2 questions are confirmed, continue with the confirmed ones only (2 or 3).
-- If fewer than 2 are confirmed after that one regeneration: tell the user this zone is too unclear to quiz on yet, so the tour is the session today. Run `node "<base>/../../dist/umap.js" unverifiable --zone <zone id>` (the map will show it as "hard to verify") and record nothing else. Stop.
+- If fewer than 2 are confirmed after that one regeneration: tell the user this zone is too unclear to quiz on yet, so the tour is the session today. Run `node "<base>/../../dist/umap.js" unverifiable --zone "<zone id>"` (the map will show it as "hard to verify") and record nothing else. Stop.
 
 Never show an unconfirmed question.
 
@@ -68,7 +70,7 @@ Give the grade and a short explanation that cites the code (`file:line`), then m
 
 ## 6. Record
 
-Run `node "<base>/../../dist/umap.js" record --kind session --zones <zone id> --grades <g1>,<g2>[,<g3>]` with the grades in question order (`pass`, `partial` or `miss`).
+Run `node "<base>/../../dist/umap.js" record --kind session --zones "<zone id>" --grades <g1>,<g2>[,<g3>]` with the grades in question order (`pass`, `partial` or `miss`).
 
 The first line it prints is always `Result: pass`, `Result: partial` or `Result: miss`. Branch on that line:
 
