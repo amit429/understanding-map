@@ -10,7 +10,7 @@ import { ghAvailable, readReviewCache, reviewCountsByPath, type PathCounts } fro
 import { renderReport, writeReport } from './report.js';
 import { handoffSet, markUnverifiable, recordResult, skipHandoff, type Grade } from './record.js';
 import { runSetup } from './setup.js';
-import { repoLineCounter, StoryboardError } from './storyboard.js';
+import { mapLineCounter, StoryboardError } from './storyboard.js';
 import { checkStoryboard, renderVisual, type LiveZone } from './visual.js';
 import { checkFresh, freshVisuals, readSavedVisual, saveVisual, visualFingerprint } from './visual-store.js';
 import { formatSummary, formatWho } from './terminal.js';
@@ -102,7 +102,8 @@ const liveZone = (z: ZoneResult): LiveZone => ({ id: z.zone.id, state: z.state, 
 const storyboardContext = (root: string, m: MapResult, zoneId: string) => ({
   zone: zoneId,
   zones: Object.fromEntries(m.zones.map((z) => [z.zone.id, z.zone.files])),
-  lineCount: repoLineCounter(root),
+  lineCount: mapLineCounter(root, m.zones.flatMap((z) => z.zone.files)),
+  people: [...new Set(m.zones.flatMap((z) => z.people.map((p) => p.handle)))],
 });
 
 export const commands: Record<string, Command> = {

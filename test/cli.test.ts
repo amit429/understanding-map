@@ -317,6 +317,16 @@ describe('cli visualize', () => {
     expect(bad.stderr).toContain('Invalid storyboard');
     const usage = await run(root, ['visualize', '--json']);
     expect(usage.code).toBe(2);
+    mkdirSync(join(root, '.understanding', 'local'), { recursive: true });
+    writeFileSync(join(root, '.understanding', 'local', 'notes.txt'), 'private\n');
+    write({ ...story(), trigger: { label: 'User opens checkout', ref: '.understanding/local/notes.txt:1' } });
+    const offMap = await run(root, ['visualize', 'src/payments', '--storyboard', file]);
+    expect(offMap.code).toBe(2);
+    expect(offMap.stderr).toContain('trigger.ref');
+    write({ ...story(), gotcha: { label: 'ask dev before changing', ref: 'src/email/receipt.ts:1' } });
+    const person = await run(root, ['visualize', 'src/payments', '--storyboard', file]);
+    expect(person.code).toBe(2);
+    expect(person.stderr).toContain('gotcha.label');
     const unknown = await run(root, ['visualize', 'nope', '--storyboard', file]);
     expect(unknown.code).toBe(1);
   });

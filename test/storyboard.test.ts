@@ -2,7 +2,7 @@ import { mkdirSync, mkdtempSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { refFiles, repoLineCounter, StoryboardError, validateStoryboard, type StoryboardContext } from '../src/storyboard';
+import { mapLineCounter, refFiles, repoLineCounter, StoryboardError, validateStoryboard, type StoryboardContext } from '../src/storyboard';
 
 const FILES: Record<string, number> = {
   'web/pages/checkout.tsx': 80, 'src/api/checkout.ts': 40, 'src/payments/charge.ts': 60, 'src/payments/stripe.ts': 90,
@@ -109,6 +109,30 @@ describe('validateStoryboard', () => {
     expect(() => validateStoryboard({ ...good(), outcome: { label: '😀'.repeat(40) } }, ctx)).not.toThrow();
   });
 
+  it('rejects bidirectional control characters in any text', () => {
+    const rlo = String.fromCodePoint(0x202e);
+    const isolate = String.fromCodePoint(0x2067);
+    expect(fieldOf((s) => { s.steps[1].label = `send ${rlo}ot Stripe`; })).toBe('steps[1].label');
+    expect(fieldOf((s) => { s.gotcha.label = `x${isolate}y`; })).toBe('gotcha.label');
+  });
+
+  it('never names people: no @mentions and no handle from the map', () => {
+    const withPeople = { ...ctx, people: ['priya', 'dev', 'al'] };
+    const field = (mut: (s: SB) => void) => {
+      const s = good() as SB;
+      mut(s);
+      try { validateStoryboard(s, withPeople); } catch (e) { return (e as StoryboardError).field; }
+      return null;
+    };
+    expect(field((s) => { s.steps[0].label = 'ask @sam first'; })).toBe('steps[0].label');
+    expect(field((s) => { s.gotcha.label = 'Priya knows why'; })).toBe('gotcha.label');
+    expect(field((s) => { s.journey[2].role = 'charges the card for priya'; })).toBe('journey[2].role');
+    expect(field((s) => { s.outcome = { label: 'mail @team' }; })).toBe('outcome.label');
+    expect(field((s) => { s.trigger.label = 'dev clicks Pay'; })).toBe('trigger.label');
+    expect(field((s) => { s.steps[0].label = 'reads devices and alerts'; })).toBeNull();
+    expect(field((s) => { s.steps[0].label = 'email a@b.io fallback'; })).toBe('steps[0].label');
+  });
+
   it('rejects a non-object storyboard', () => {
     expect(() => validateStoryboard([], ctx)).toThrow(StoryboardError);
   });
@@ -126,6 +150,21 @@ describe('refFiles', () => {
   it('lists every file named by any ref, once', () => {
     const v = validateStoryboard(good(), ctx);
     expect(refFiles(v)).toEqual(['src/api/checkout.ts', 'src/email/receipt.ts', 'src/payments/charge.ts', 'src/payments/ledger.ts', 'src/payments/stripe.ts', 'web/pages/checkout.tsx']);
+  });
+});
+
+describe('mapLineCounter', () => {
+  it('counts only files on the map (tracked and not excluded)', () => {
+    const root = mkdtempSync(join(tmpdir(), 'umap-sbm-'));
+    mkdirSync(join(root, 'src'));
+    mkdirSync(join(root, 'node_modules'));
+    writeFileSync(join(root, 'src', 'a.ts'), 'one\ntwo\n');
+    writeFileSync(join(root, 'node_modules', 'x.js'), 'x\n');
+    writeFileSync(join(root, '.env'), 'SECRET=1\n');
+    const count = mapLineCounter(root, ['src/a.ts']);
+    expect(count('src/a.ts')).toBe(2);
+    expect(count('node_modules/x.js')).toBeNull();
+    expect(count('.env')).toBeNull();
   });
 });
 

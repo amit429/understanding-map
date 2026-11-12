@@ -25,8 +25,10 @@ export interface StoryboardContext {
   zone: string;
   /** Every zone on the current map: id → files. */
   zones: Record<string, string[]>;
-  /** Line count of a repository file, or null when it is missing, not a file, or outside the repository. */
+  /** Line count of a file on the map, or null when it is missing, not on the map, or outside the repository. */
   lineCount: (path: string) => number | null;
+  /** Handles of everyone on the map: storyboard text must never name them. */
+  people?: string[];
 }
 
 export class StoryboardError extends Error {
@@ -40,14 +42,24 @@ const fail = (field: string, message: string): never => { throw new StoryboardEr
 const isObj = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
 const chars = (s: string) => [...s].length;
 // eslint-disable-next-line no-control-regex
-const CONTROL = /[\u0000-\u001f\u007f\u2028\u2029]/;
+const CONTROL = /[\u0000-\u001f\u007f\u2028\u2029\u202a-\u202e\u2066-\u2069]/;
 
-function text(v: unknown, field: string, max: number): string {
+const MENTION = /@[A-Za-z0-9_]/;
+const escapeRe = (x: string) => x.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+function text(v: unknown, field: string, max: number, ctx: StoryboardContext): string {
   if (typeof v !== 'string') return fail(field, 'must be a string');
   const s = v.trim();
   if (!s) return fail(field, 'must not be empty');
   if (CONTROL.test(s)) return fail(field, 'must be one line of plain text');
   if (chars(s) > max) return fail(field, `is ${chars(s)} characters; the limit is ${max}`);
+  if (MENTION.test(s)) return fail(field, 'must not name people (no @mentions or email addresses)');
+  // Handles under 3 characters are skipped: they would block ordinary words.
+  for (const h of ctx.people ?? []) {
+    if (h.length >= 3 && new RegExp(`(^|[^a-z0-9])${escapeRe(h.toLowerCase())}($|[^a-z0-9])`).test(s.toLowerCase())) {
+      return fail(field, 'must not name people (it contains a handle from the map)');
+    }
+  }
   return s;
 }
 
@@ -66,7 +78,7 @@ function ref(v: unknown, field: string, ctx: StoryboardContext, within?: { zone:
   const r = parseRef(v.trim());
   if (!r) return fail(field, `"${v}" must be "path:line" with a repository-relative path and a line from 1`);
   const n = ctx.lineCount(r.path);
-  if (n === null) return fail(field, `${r.path} is not a file in the repository`);
+  if (n === null) return fail(field, `${r.path} is not a file on the map (tracked and not excluded)`);
   if (r.line > n) return fail(field, `line ${r.line} is past the end of ${r.path} (${n} lines)`);
   if (within && !within.files.includes(r.path)) return fail(field, `${r.path} is not in zone ${within.zone}`);
   return `${r.path}:${r.line}`;
@@ -89,13 +101,13 @@ function journey(v: unknown, ctx: StoryboardContext): JourneyStop[] | null {
     if (!isObj(s)) return fail(f, 'must be an object');
     if (s.target !== undefined && typeof s.target !== 'boolean') fail(`${f}.target`, 'must be true or false');
     const target = s.target === true;
-    const label = text(s.label, `${f}.label`, LABEL_MAX);
+    const label = text(s.label, `${f}.label`, LABEL_MAX, ctx);
     if (typeof s.zone !== 'string' || !Object.hasOwn(ctx.zones, s.zone)) {
       return fail(`${f}.zone`, `"${String(s.zone)}" is not a zone on the map`);
     }
     if (target && s.zone !== ctx.zone) return fail(`${f}.zone`, `the target stop must be the visualised zone ${ctx.zone}`);
     const stop: JourneyStop = { label, zone: s.zone, ref: ref(s.ref, `${f}.ref`, ctx, { zone: s.zone, files: ctx.zones[s.zone] }), target };
-    if (target) stop.role = text(s.role, `${f}.role`, ROLE_MAX);
+    if (target) stop.role = text(s.role, `${f}.role`, ROLE_MAX, ctx);
     return stop;
   });
 }
@@ -105,20 +117,20 @@ export function validateStoryboard(raw: unknown, ctx: StoryboardContext): Storyb
   if (!isObj(raw)) return fail('storyboard', 'must be a JSON object');
   if (raw.zone !== ctx.zone) return fail('zone', `must be "${ctx.zone}"`);
   const trig = optional(raw.trigger, 'trigger');
-  const trigger = trig && { label: text(trig.label, 'trigger.label', LABEL_MAX), ref: ref(trig.ref, 'trigger.ref', ctx) };
+  const trigger = trig && { label: text(trig.label, 'trigger.label', LABEL_MAX, ctx), ref: ref(trig.ref, 'trigger.ref', ctx) };
   const stops = journey(raw.journey, ctx);
   const out = optional(raw.outcome, 'outcome');
-  const outcome = out && { label: text(out.label, 'outcome.label', LABEL_MAX) };
+  const outcome = out && { label: text(out.label, 'outcome.label', LABEL_MAX, ctx) };
   if (!Array.isArray(raw.steps) || raw.steps.length < STEPS_MIN || raw.steps.length > STEPS_MAX) {
     return fail('steps', `must have ${STEPS_MIN}–${STEPS_MAX} steps`);
   }
   const zone = { zone: ctx.zone, files: ctx.zones[ctx.zone] ?? [] };
   const steps = raw.steps.map((s, i) => {
     if (!isObj(s)) return fail(`steps[${i}]`, 'must be an object');
-    return { label: text(s.label, `steps[${i}].label`, LABEL_MAX), ref: ref(s.ref, `steps[${i}].ref`, ctx, zone) };
+    return { label: text(s.label, `steps[${i}].label`, LABEL_MAX, ctx), ref: ref(s.ref, `steps[${i}].ref`, ctx, zone) };
   });
   const g = optional(raw.gotcha, 'gotcha');
-  const gotcha = g && { label: text(g.label, 'gotcha.label', LABEL_MAX), ref: ref(g.ref, 'gotcha.ref', ctx) };
+  const gotcha = g && { label: text(g.label, 'gotcha.label', LABEL_MAX, ctx), ref: ref(g.ref, 'gotcha.ref', ctx) };
   return { zone: ctx.zone, trigger, journey: stops, outcome, steps, gotcha };
 }
 
@@ -126,6 +138,13 @@ export function validateStoryboard(raw: unknown, ctx: StoryboardContext): Storyb
 export function refFiles(s: Storyboard): string[] {
   const refs = [s.trigger?.ref, ...(s.journey ?? []).map((j) => j.ref), ...s.steps.map((x) => x.ref), s.gotcha?.ref];
   return [...new Set(refs.flatMap((r) => (r ? [parseRef(r)?.path ?? ''] : [])).filter(Boolean))].sort();
+}
+
+/** Line counter for the map's files only (tracked and not excluded), so refs never point at private or ignored files. */
+export function mapLineCounter(root: string, mapFiles: Iterable<string>): (path: string) => number | null {
+  const known = new Set(mapFiles);
+  const count = repoLineCounter(root);
+  return (path) => (known.has(path) ? count(path) : null);
 }
 
 /** Line counter for files inside `root` (symlinks resolved; nothing outside the root or under .git). */
