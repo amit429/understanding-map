@@ -1,5 +1,5 @@
-import { realpathSync } from 'node:fs';
-import { relative } from 'node:path';
+import { readFileSync, realpathSync } from 'node:fs';
+import { relative, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { ensureUnderstandingIgnore, isSetUp, loadConfig } from './config.js';
 import { pickZone, targetPath, zoneContext } from './context.js';
@@ -10,6 +10,9 @@ import { ghAvailable, readReviewCache, reviewCountsByPath, type PathCounts } fro
 import { renderReport, writeReport } from './report.js';
 import { handoffSet, markUnverifiable, recordResult, skipHandoff, type Grade } from './record.js';
 import { runSetup } from './setup.js';
+import { repoLineCounter, StoryboardError } from './storyboard.js';
+import { checkStoryboard, renderVisual, type LiveZone } from './visual.js';
+import { checkFresh, readSavedVisual, saveVisual, visualFingerprint } from './visual-store.js';
 import { formatSummary, formatWho } from './terminal.js';
 import type { Config, MapResult, ZoneResult } from './types.js';
 
@@ -94,6 +97,13 @@ async function readStdin(): Promise<string> {
   for await (const chunk of process.stdin) text += String(chunk);
   return text;
 }
+
+const liveZone = (z: ZoneResult): LiveZone => ({ id: z.zone.id, state: z.state, reason: z.reason, fanIn: z.criticality.fanIn });
+const storyboardContext = (root: string, m: MapResult, zoneId: string) => ({
+  zone: zoneId,
+  zones: Object.fromEntries(m.zones.map((z) => [z.zone.id, z.zone.files])),
+  lineCount: repoLineCounter(root),
+});
 
 export const commands: Record<string, Command> = {
   /** Hook entry point: not guarded; reads stdin, never throws, always exits 0. */
@@ -288,6 +298,70 @@ export const commands: Record<string, Command> = {
         `Entry hints: ${c.entryHints.length ? c.entryHints.map((h) => h.file).join(', ') : 'none'}`,
       ].join('\n'));
     }
+    return 0;
+  }),
+
+  visualize: guarded((root, args) => {
+    const sbFile = valueOf(args, '--storyboard');
+    const positional = args.filter((a, i) => !a.startsWith('--') && args[i - 1] !== '--storyboard');
+    const json = args.includes('--json');
+    const cached = args.includes('--cached');
+    if (!positional[0] || (!cached && !sbFile)) {
+      err('Usage: visualize "<zone>" --storyboard <file.json> [--json] | visualize "<zone>" --cached [--json]');
+      return 2;
+    }
+    const m = buildMap(root);
+    const p = pickZone(m, root, positional[0]);
+    if (!p.zone) {
+      err(p.why);
+      return 1;
+    }
+    const z = p.zone;
+    const rel = (path: string) => relative(root, path).split('\\').join('/');
+    const ready = (path: string, scenes: string[], fromCache: boolean) => {
+      if (json) out(JSON.stringify({ path, rel: rel(path), scenes, cached: fromCache }));
+      else out(`Animation ready${fromCache ? ' (unchanged code, reused)' : ''}: ${rel(path)} — open it in your browser.`);
+    };
+    const date = new Date().toISOString();
+    ensureUnderstandingIgnore(root);
+
+    if (cached) {
+      const saved = readSavedVisual(root, z.zone.id);
+      let reason = saved ? '' : 'no saved animation for this zone yet';
+      if (saved) {
+        const fresh = checkFresh(root, { id: z.zone.id, files: z.zone.files }, saved);
+        if (!fresh.fresh) reason = fresh.reason;
+        else {
+          try { checkStoryboard(saved.storyboard, storyboardContext(root, m, z.zone.id)); } catch { reason = 'the saved storyboard no longer matches the map'; }
+        }
+      }
+      if (reason || !saved) {
+        out(json ? JSON.stringify({ cached: false, reason }) : `No reusable animation: ${reason}.`);
+        return 0;
+      }
+      const r = renderVisual(saved.storyboard, liveZone(z), date.slice(0, 10));
+      ready(saveVisual(root, saved, r.html).html, r.scenes, true);
+      return 0;
+    }
+
+    let raw: unknown;
+    try {
+      raw = JSON.parse(readFileSync(resolve(sbFile!), 'utf8'));
+    } catch (e) {
+      err(`Invalid storyboard: storyboard: could not read ${sbFile} as JSON (${(e as Error).message.split('\n')[0]})`);
+      return 2;
+    }
+    let sb;
+    try {
+      sb = checkStoryboard(raw, storyboardContext(root, m, z.zone.id));
+    } catch (e) {
+      if (!(e instanceof StoryboardError)) throw e;
+      err(`Invalid storyboard: ${e.message}`);
+      return 2;
+    }
+    const r = renderVisual(sb, liveZone(z), date.slice(0, 10));
+    const paths = saveVisual(root, { zone: z.zone.id, date, fingerprint: visualFingerprint(root, z.zone.files, sb), storyboard: sb }, r.html);
+    ready(paths.html, r.scenes, false);
     return 0;
   }),
 

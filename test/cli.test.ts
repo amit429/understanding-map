@@ -257,3 +257,85 @@ describe('cli context', () => {
     expect(u.stderr).toContain('No zone found for "nope"');
   });
 });
+
+describe('cli visualize', () => {
+  const story = () => ({
+    zone: 'src/payments',
+    trigger: { label: 'User opens checkout', ref: 'web/pages/checkout.ts:2' },
+    journey: [
+      { label: 'checkout page', zone: 'web/pages', ref: 'web/pages/checkout.ts:2' },
+      { label: 'checkout API', zone: 'src/api', ref: 'src/api/checkout.ts:1' },
+      { label: 'payments', zone: 'src/payments', ref: 'src/payments/charge.ts:1', target: true, role: 'charges the card and writes the ledger' },
+    ],
+    outcome: { label: 'Receipt sent' },
+    steps: [
+      { label: 'send to Stripe', ref: 'src/payments/charge.ts:1' },
+      { label: 'write the ledger', ref: 'src/payments/charge.ts:2' },
+      { label: 'email the receipt', ref: 'src/payments/ledger.ts:1' },
+    ],
+    gotcha: { label: 'Receipts come from email zone', ref: 'src/email/receipt.ts:1' },
+  });
+  const setup = async () => {
+    const { journeyRepo } = await import('./helpers/journey');
+    const root = realpathSync(journeyRepo());
+    const file = join(mkdtempSync(join(tmpdir(), 'umap-sbf-')), 'storyboard.json');
+    const write = (v: unknown) => writeFileSync(file, typeof v === 'string' ? v : JSON.stringify(v));
+    write(story());
+    return { root, file, write };
+  };
+
+  it('validates, renders and saves the page and the storyboard with its fingerprint', async () => {
+    const { root, file } = await setup();
+    const r = await run(root, ['visualize', 'src/payments', '--storyboard', file, '--json']);
+    expect(r.stderr).toBe('');
+    expect(r.code).toBe(0);
+    const j = JSON.parse(r.stdout);
+    const { visualSlug } = await import('../src/visual-store');
+    const base = join(root, '.understanding', 'local', 'visuals', visualSlug('src/payments'));
+    expect(j).toMatchObject({ path: `${base}.html`, cached: false, scenes: ['why', 'journey', 'inside', 'outro'] });
+    expect(readFileSync(`${base}.html`, 'utf8')).toContain('Lock it in: /understanding-map:learn src/payments');
+    const saved = JSON.parse(readFileSync(`${base}.json`, 'utf8'));
+    expect(saved.storyboard.steps).toHaveLength(3);
+    expect(Object.keys(saved.fingerprint).sort()).toEqual([
+      'src/api/checkout.ts', 'src/email/receipt.ts', 'src/payments/charge.ts', 'src/payments/ledger.ts', 'src/payments/stripe.ts', 'web/pages/checkout.ts']);
+    expect(typeof saved.date).toBe('string');
+    expect(existsSync(join(root, '.understanding', '.gitignore'))).toBe(true);
+    const t = await run(root, ['visualize', 'src/payments', '--storyboard', file]);
+    expect(t.stdout).toContain(`Animation ready: .understanding/local/visuals/${visualSlug('src/payments')}.html`);
+  });
+
+  it('exits 2 with one line naming the field when the storyboard is invalid', async () => {
+    const { root, file, write } = await setup();
+    write({ ...story(), steps: [{ label: 'a', ref: 'src/api/checkout.ts:1' }, ...story().steps] });
+    const r = await run(root, ['visualize', 'src/payments', '--storyboard', file]);
+    expect(r.code).toBe(2);
+    expect(r.stderr.trim().split('\n')).toHaveLength(1);
+    expect(r.stderr).toContain('steps[0].ref');
+    write('{not json');
+    const bad = await run(root, ['visualize', 'src/payments', '--storyboard', file]);
+    expect(bad.code).toBe(2);
+    expect(bad.stderr).toContain('Invalid storyboard');
+    const usage = await run(root, ['visualize', '--json']);
+    expect(usage.code).toBe(2);
+    const unknown = await run(root, ['visualize', 'nope', '--storyboard', file]);
+    expect(unknown.code).toBe(1);
+  });
+
+  it('--cached reuses a fresh storyboard with live scene-1 data, and refuses a stale one', async () => {
+    const { root, file } = await setup();
+    const none = await run(root, ['visualize', 'src/payments', '--cached', '--json']);
+    expect(JSON.parse(none.stdout)).toMatchObject({ cached: false });
+    expect(JSON.parse(none.stdout).reason).toBeTruthy();
+    const made = JSON.parse((await run(root, ['visualize', 'src/payments', '--storyboard', file, '--json'])).stdout);
+    expect(readFileSync(made.path, 'utf8')).toContain('>Dark</tspan>');
+    rmSync(made.path);
+    await run(root, ['record', '--kind', 'session', '--zones', 'src/payments', '--grades', 'pass,pass']);
+    const hit = await run(root, ['visualize', 'src/payments', '--cached', '--json']);
+    expect(JSON.parse(hit.stdout)).toMatchObject({ path: made.path, cached: true });
+    expect(readFileSync(made.path, 'utf8')).toContain('>Owned</tspan>');
+    writeFileSync(join(root, 'web/pages/checkout.ts'), 'changed\n');
+    const stale = JSON.parse((await run(root, ['visualize', 'src/payments', '--cached', '--json'])).stdout);
+    expect(stale).toMatchObject({ cached: false });
+    expect(stale.reason).toContain('web/pages/checkout.ts');
+  });
+});
