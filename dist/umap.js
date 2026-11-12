@@ -2988,6 +2988,7 @@ var plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
 var pct = (s) => `${Math.max(1, Math.round(s * 100))}%`;
 var ago = (days) => days < 1 ? "today" : `${plural(Math.floor(days), "day", "days")} ago`;
 var timeDecay = (days, halfLifeDays) => halfLifeDays > 0 ? 0.5 ** (days / halfLifeDays) : 1;
+var NOTICEABLE_DECAY = 0.97;
 function decayTimeEvidence(days, cfg) {
   return { kind: "decay-time", text: `evidence from ${ago(days)} counts for less (it halves every ${cfg.halfLifeDays} days)` };
 }
@@ -3054,7 +3055,7 @@ function historyLevel(handle, zone, touches, inp) {
     const changed = zone.loc > 0 ? Math.max(0, 1 - othersAfter / zone.loc) : 1;
     if (othersAfter > 0) evidence.push({ kind: "decay-change", text: `others have added ~${othersAfter} lines here since` });
     const faded = timeDecay(days, inp.config.halfLifeDays);
-    if (faded < 1) evidence.push(decayTimeEvidence(days, inp.config));
+    if (faded <= NOTICEABLE_DECAY) evidence.push(decayTimeEvidence(days, inp.config));
     level = raw * changed * faded;
   }
   if (reviews) {
@@ -3075,7 +3076,7 @@ function passLevel(ev, zone, inp, kind) {
   const what = ev.kind === "handoff" ? "a handoff check" : "a learning session";
   const evidence = [kind === "pass" ? { kind: "pass", text: `passed ${what} here ${ago(days)}` } : { kind: "partial", text: `partly passed ${what} here ${ago(days)}` }];
   if (unchanged < 1) evidence.push({ kind: "decay-change", text: `about ${pct(1 - unchanged)} of its files have changed since` });
-  if (faded < 1) evidence.push(decayTimeEvidence(days, inp.config));
+  if (faded <= NOTICEABLE_DECAY) evidence.push(decayTimeEvidence(days, inp.config));
   return { level: clamp(ev.level) * unchanged * faded, evidence };
 }
 var FLAG_TEXT = {

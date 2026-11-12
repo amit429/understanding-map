@@ -67,6 +67,16 @@ describe('solo mode', () => {
     expect(z.state).toBe('fading');
   });
 
+  it('shows decay-time evidence only once time has taken off more than 3%', () => {
+    const kinds = (days: number) => {
+      const inp = inputs({ zones: [core], commits: [mkCommit('c1', 'me', days, [['core/a.ts', 500]])], passes: new Map([['me', [pass(core, 90, days)]]]) });
+      return person(result(inp, 'core').people, 'me').evidence.map((e) => e.kind);
+    };
+    expect(kinds(0)).not.toContain('decay-time');
+    expect(kinds(7)).not.toContain('decay-time'); // 0.5 ** (7 / 180) ≈ 0.973
+    expect(kinds(9)).toContain('decay-time');
+  });
+
   it('applies no time decay when halfLifeDays <= 0, and never yields NaN', () => {
     const commits = [mkCommit('c2', 'me', 5, [['docs/x.md', 10]]), mkCommit('c1', 'me', 200, [['core/a.ts', 500]])];
     const empty = mkZone('empty', [], 0);

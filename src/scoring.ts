@@ -37,6 +37,8 @@ const ago = (days: number) => (days < 1 ? 'today' : `${plural(Math.floor(days), 
 
 /** Half-life decay; no decay when halfLifeDays <= 0. */
 const timeDecay = (days: number, halfLifeDays: number) => (halfLifeDays > 0 ? 0.5 ** (days / halfLifeDays) : 1);
+/** Time decay is still applied above this factor, but too small to be worth listing as evidence. */
+const NOTICEABLE_DECAY = 0.97;
 
 function decayTimeEvidence(days: number, cfg: Config): Evidence {
   return { kind: 'decay-time', text: `evidence from ${ago(days)} counts for less (it halves every ${cfg.halfLifeDays} days)` };
@@ -131,7 +133,7 @@ function historyLevel(handle: string, zone: Zone, touches: Touch[], inp: ScoreIn
     if (othersAfter > 0) evidence.push({ kind: 'decay-change', text: `others have added ~${othersAfter} lines here since` });
 
     const faded = timeDecay(days, inp.config.halfLifeDays);
-    if (faded < 1) evidence.push(decayTimeEvidence(days, inp.config));
+    if (faded <= NOTICEABLE_DECAY) evidence.push(decayTimeEvidence(days, inp.config));
     level = raw * changed * faded;
   }
   if (reviews) {
@@ -157,7 +159,7 @@ function passLevel(ev: PassEvent, zone: Zone, inp: ScoreInputs, kind: 'pass' | '
     ? { kind: 'pass', text: `passed ${what} here ${ago(days)}` }
     : { kind: 'partial', text: `partly passed ${what} here ${ago(days)}` }];
   if (unchanged < 1) evidence.push({ kind: 'decay-change', text: `about ${pct(1 - unchanged)} of its files have changed since` });
-  if (faded < 1) evidence.push(decayTimeEvidence(days, inp.config));
+  if (faded <= NOTICEABLE_DECAY) evidence.push(decayTimeEvidence(days, inp.config));
   return { level: clamp(ev.level) * unchanged * faded, evidence };
 }
 
