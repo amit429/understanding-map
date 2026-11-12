@@ -4,7 +4,7 @@ import type {
 } from './types.js';
 import {
   AGENT_PENALTY, CRIT, DARK_AGENT_SHARE, DARKNESS, FIX_RE, HUMAN_BASE, HUMAN_SHARE_MAX, HUMAN_SHARE_MULT,
-  REVIEW_MAX, REVIEW_PER,
+  RECENT_DAYS, REVIEW_MAX, REVIEW_PER,
 } from './weights.js';
 
 export interface ScoreInputs {
@@ -18,8 +18,6 @@ export interface ScoreInputs {
 }
 
 const DAY = 86_400_000;
-/** Window for churn and bug history; the reason text says "in the last 90 days". */
-const RECENT_DAYS = 90;
 const STATES: ZoneState[] = ['owned', 'fragile', 'fading', 'dark', 'unknown'];
 
 interface Scored { level: number; evidence: Evidence[] }

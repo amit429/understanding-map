@@ -4,6 +4,7 @@ import { markChecked, uncheckedEdits } from './editlog.js';
 import { buildMap } from './pipeline.js';
 import { readZoneCache } from './zones.js';
 import type { EditLogEntry, ZoneState } from './types.js';
+import { HANDOFF_PASS_LEVEL, PARTIAL_LEVEL, SESSION_PASS_LEVEL } from './weights.js';
 
 export type Grade = 'pass' | 'partial' | 'miss';
 
@@ -62,7 +63,7 @@ export function recordResult(
     if (result === 'pass') {
       for (const id of live) {
         const z = before.zones.find((x) => x.zone.id === id)!;
-        appendPass(root, before.me, { zone: id, level: Math.max(levelOf(before, id), 65), fingerprint: z.zone.fingerprint, date, kind: 'handoff' });
+        appendPass(root, before.me, { zone: id, level: Math.max(levelOf(before, id), HANDOFF_PASS_LEVEL), fingerprint: z.zone.fingerprint, date, kind: 'handoff' });
       }
       for (const id of zoneIds) removeFlag(root, id, 'unreviewed-agent-code');
     } else if (result === 'miss') {
@@ -74,11 +75,11 @@ export function recordResult(
       const z = before.zones.find((x) => x.zone.id === id)!;
       const current = levelOf(before, id);
       if (result === 'pass') {
-        appendPass(root, before.me, { zone: id, level: Math.max(current, 80), fingerprint: z.zone.fingerprint, date, kind: 'session' });
+        appendPass(root, before.me, { zone: id, level: Math.max(current, SESSION_PASS_LEVEL), fingerprint: z.zone.fingerprint, date, kind: 'session' });
         removeFlag(root, id, 'hard-to-verify');
         removeFlag(root, id, 'unreviewed-agent-code');
       } else if (result === 'partial') {
-        appendLocalPartial(root, { zone: id, level: Math.max(current, 50), fingerprint: z.zone.fingerprint, date, kind: 'session' });
+        appendLocalPartial(root, { zone: id, level: Math.max(current, PARTIAL_LEVEL), fingerprint: z.zone.fingerprint, date, kind: 'session' });
         appendAttempt(root, { zone: id, kind: 'session', result: 'partial', date });
       } else {
         appendAttempt(root, { zone: id, kind: 'session', result: 'miss', date, retryAfter: new Date(now.getTime() + 3 * DAY).toISOString() });

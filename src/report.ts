@@ -2,7 +2,7 @@ import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { hierarchy, treemap, treemapSquarify } from 'd3-hierarchy';
 import { DEFAULT_CONFIG } from './config.js';
-import { REPORT_TEMPLATE } from './report-template.js';
+import { howEstimatesWork, REPORT_TEMPLATE, type MethodSettings } from './report-template.js';
 import type { MapResult, ZoneResult, ZoneState } from './types.js';
 
 interface Node { name: string; zone?: ZoneResult; children?: Node[] }
@@ -85,14 +85,21 @@ function reportData(m: MapResult, threshold: number) {
 
 const safeJson = (v: unknown) => JSON.stringify(v).replace(/</g, '\\u003c').replace(/\u2028/g, '\\u2028').replace(/\u2029/g, '\\u2029');
 
-export function renderReport(m: MapResult, opts: { threshold?: number } = {}): string {
+export function renderReport(m: MapResult, opts: Partial<MethodSettings> = {}): string {
+  const settings: MethodSettings = {
+    threshold: opts.threshold ?? DEFAULT_CONFIG.threshold,
+    fadingFloor: opts.fadingFloor ?? DEFAULT_CONFIG.fadingFloor,
+    halfLifeDays: opts.halfLifeDays ?? DEFAULT_CONFIG.halfLifeDays,
+    activeDays: opts.activeDays ?? DEFAULT_CONFIG.activeDays,
+  };
   const fill: Record<string, string> = {
     __HEADER__: renderHeader(m),
     __TREEMAP__: renderTreemap(m.zones),
     __TABLE__: renderTable(m.zones),
-    __DATA__: safeJson(reportData(m, opts.threshold ?? DEFAULT_CONFIG.threshold)),
+    __DATA__: safeJson(reportData(m, settings.threshold)),
+    __METHOD__: howEstimatesWork(m.mode, settings),
   };
-  return REPORT_TEMPLATE.replace(/__(HEADER|TREEMAP|TABLE|DATA)__/g, (k) => fill[k]);
+  return REPORT_TEMPLATE.replace(/__(HEADER|TREEMAP|TABLE|DATA|METHOD)__/g, (k) => fill[k]);
 }
 
 export function writeReport(root: string, html: string): string {

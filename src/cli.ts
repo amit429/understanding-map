@@ -147,12 +147,13 @@ export const commands: Record<string, Command> = {
 
   map: guarded((root, args) => {
     ensureUnderstandingIgnore(root);
-    const m = buildMap(root, { reviewsByPath: optionalReviews(root, loadConfig(root)) });
+    const config = loadConfig(root);
+    const m = buildMap(root, { reviewsByPath: optionalReviews(root, config) });
     const { flags } = parseArgs(args);
     let reportPath: string | null = null;
     if (!flags.has('--no-report')) {
       try {
-        reportPath = writeReport(root, renderReport(m, { threshold: loadConfig(root).threshold }));
+        reportPath = writeReport(root, renderReport(m, config));
       } catch (e) {
         err(`Could not write the HTML report: ${(e as Error).message.split('\n')[0]}`);
       }

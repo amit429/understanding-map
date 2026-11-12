@@ -15,6 +15,16 @@ export const REVIEW_PER = 5;
 /** ...capped at this many points. */
 export const REVIEW_MAX = 10;
 
+/** A passed learning session sets the level to max(current, this). */
+export const SESSION_PASS_LEVEL = 80;
+/** A partly passed session (kept on this machine) sets max(current, this). */
+export const PARTIAL_LEVEL = 50;
+/** A passed handoff check sets each touched zone to max(current, this). */
+export const HANDOFF_PASS_LEVEL = 65;
+
+/** Window for churn and bug history, in days. */
+export const RECENT_DAYS = 90;
+
 /** How dark each state counts for ranking: danger = darkness × criticality. Unknown zones are never ranked. */
 export const DARKNESS: Record<ZoneState, number> = { dark: 1, fading: 0.6, fragile: 0.4, owned: 0.1, unknown: 0 };
 

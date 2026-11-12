@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { renderReport, writeReport } from '../src/report';
+import * as W from '../src/weights';
 import type { Evidence, MapResult, PersonLevel, ZoneResult, ZoneState } from '../src/types';
 
 function zone(id: string, state: ZoneState, people: PersonLevel[], over: Partial<ZoneResult> = {}): ZoneResult {
@@ -91,6 +92,27 @@ describe('renderReport', () => {
     expect(html).toMatch(/:root\s*{[^}]*--bg:/);
     expect(html).toMatch(/prefers-color-scheme:\s*dark/);
     expect(html).toContain('name="viewport"');
+  });
+
+  it('documents how estimates work, with numbers taken from the weights and the config', () => {
+    const section = (html: string) => html.slice(html.indexOf('<h2>How estimates work</h2>'), html.indexOf('</section>', html.indexOf('<h2>How estimates work</h2>')));
+    const t = section(renderReport(team, { threshold: 70, fadingFloor: 25, halfLifeDays: 120, activeDays: 60 }));
+    expect(t).toContain(`starts at ${W.HUMAN_BASE}`);
+    expect(t).toContain(`up to +${W.HUMAN_SHARE_MAX}`);
+    expect(t).toContain(`${W.AGENT_PENALTY} ×`);
+    expect(t).toContain('halves every 120 days');
+    expect(t).toContain(`max(current, ${W.SESSION_PASS_LEVEL})`);
+    expect(t).toContain(`max(current, ${W.HANDOFF_PASS_LEVEL})`);
+    expect(t).toContain(`max(current, ${W.PARTIAL_LEVEL})`);
+    expect(t).toContain(`up to +${W.REVIEW_MAX}`);
+    expect(t).toContain('70 or more');
+    expect(t).toContain('25 or more');
+    expect(t).toContain('last 60 days');
+    expect(t).toContain('Fragile');
+    const solo = section(renderReport(result('solo', [])));
+    expect(solo).toContain('halves every 180 days');
+    expect(solo).toContain('60 or more');
+    expect(solo).not.toContain('Fragile');
   });
 
   it('renders an empty map without throwing', () => {

@@ -2967,6 +2967,10 @@ var HUMAN_SHARE_MAX = 40;
 var AGENT_PENALTY = 50;
 var REVIEW_PER = 5;
 var REVIEW_MAX = 10;
+var SESSION_PASS_LEVEL = 80;
+var PARTIAL_LEVEL = 50;
+var HANDOFF_PASS_LEVEL = 65;
+var RECENT_DAYS = 90;
 var DARKNESS = { dark: 1, fading: 0.6, fragile: 0.4, owned: 0.1, unknown: 0 };
 var CRIT = { fanIn: 0.35, churn: 0.25, loc: 0.15, fixes: 0.25, tagged: 1 };
 var FIX_RE = /\b(fix|bug|hotfix|revert|incident)\b/i;
@@ -2974,7 +2978,6 @@ var DARK_AGENT_SHARE = 0.5;
 
 // src/scoring.ts
 var DAY = 864e5;
-var RECENT_DAYS = 90;
 var STATES = ["owned", "fragile", "fading", "dark", "unknown"];
 var clamp = (n, lo = 0, hi = 100) => Math.min(hi, Math.max(lo, n));
 var sum = (ns) => ns.reduce((a, b) => a + b, 0);
@@ -3635,6 +3638,22 @@ var resquarify = function custom2(ratio) {
 }(phi);
 
 // src/report-template.ts
+function howEstimatesWork(mode, s) {
+  const pct2 = (f) => `${Math.round(f * 100)}%`;
+  const states = mode === "team" ? `Owned: 2 or more active people at ${s.threshold} or more. Fragile: exactly one. Fading: nobody active at ${s.threshold}, but someone active at ${s.fadingFloor} or more. Dark: nobody active at ${s.fadingFloor} or more, and at least ${pct2(DARK_AGENT_SHARE)} of the zone is agent-written or everyone with evidence here is inactive. Unknown: not enough evidence either way. Active means a commit or a pass in this repository in the last ${s.activeDays} days.` : `Owned: your level is ${s.threshold} or more. Fading: ${s.fadingFloor} or more. Dark: there is evidence, but your level is below ${s.fadingFloor}. Unknown: no evidence yet.`;
+  const darkness = (mode === "team" ? ["dark", "fading", "fragile", "owned"] : ["dark", "fading", "owned"]).map((k) => `${k[0].toUpperCase()}${k.slice(1)} ${DARKNESS[k]}`).join(", ");
+  const items = [
+    `<strong>Commits.</strong> Anyone who committed to a zone starts at ${HUMAN_BASE}, plus up to +${HUMAN_SHARE_MAX} for authorship (${HUMAN_SHARE_MULT} \xD7 the lines they added \xF7 the zone's lines of code), minus ${AGENT_PENALTY} \xD7 the fraction of their lines written by agents.`,
+    `<strong>Code changed since.</strong> That level is multiplied by 1 \u2212 (lines others added after their last commit \xF7 the zone's lines of code).`,
+    `<strong>Time.</strong> Evidence counts for less as it ages: it halves every ${s.halfLifeDays} days.`,
+    `<strong>Sessions and handoff checks.</strong> A passed learning session sets your level to max(current, ${SESSION_PASS_LEVEL}); a passed handoff check sets each touched zone to max(current, ${HANDOFF_PASS_LEVEL}); a partly passed session sets max(current, ${PARTIAL_LEVEL}) and stays on your machine. These decay with the share of the zone's files changed since, and with time.`,
+    `<strong>Reviews.</strong> With the optional PR review signal on, each substantive review comment adds +${REVIEW_PER}, up to +${REVIEW_MAX}.`,
+    `A person's level is the highest of these, from 0 to 100.`,
+    `<strong>States.</strong> ${states}`,
+    `<strong>Ranking.</strong> Danger = darkness \xD7 criticality. Darkness: ${darkness}; Unknown zones are not ranked. Criticality adds percentile ranks of fan-in (\xD7 ${CRIT.fanIn}), commits in the last ${RECENT_DAYS} days (\xD7 ${CRIT.churn}), lines of code (\xD7 ${CRIT.loc}) and fixes in the last ${RECENT_DAYS} days (\xD7 ${CRIT.fixes}), plus ${CRIT.tagged} for zones tagged critical.`
+  ];
+  return `<ul class="method">${items.map((i) => `<li>${i}</li>`).join("")}</ul>`;
+}
 var REPORT_TEMPLATE = String.raw`<!doctype html>
 <html lang="en">
 <head>
@@ -3690,6 +3709,9 @@ tbody tr:hover, tbody tr.sel { background: color-mix(in srgb, var(--accent) 12%,
 #panel ul { margin: 0; padding-left: 20px; }
 .cmd { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 14px; }
 .cmd code { font-family: var(--mono); background: var(--bg); border: 1px solid var(--border); border-radius: 6px; padding: 4px 8px; word-break: break-all; }
+.method { padding-left: 20px; color: var(--muted); font-size: 0.88rem; }
+.method li { margin: 4px 0; }
+.method strong { color: var(--text); }
 button { font: inherit; background: var(--accent); color: var(--bg); border: 0; border-radius: 6px; padding: 4px 12px; cursor: pointer; }
 </style>
 </head>
@@ -3710,6 +3732,10 @@ __HEADER__
 </table>
 </div>
 <section id="panel" aria-live="polite"><p class="note">Select a zone to see its evidence.</p></section>
+<section>
+<h2>How estimates work</h2>
+__METHOD__
+</section>
 </main>
 <script type="application/json" id="data">__DATA__</script>
 <script>
@@ -3852,13 +3878,20 @@ function reportData(m, threshold) {
 }
 var safeJson = (v) => JSON.stringify(v).replace(/</g, "\\u003c").replace(/\u2028/g, "\\u2028").replace(/\u2029/g, "\\u2029");
 function renderReport(m, opts = {}) {
+  const settings = {
+    threshold: opts.threshold ?? DEFAULT_CONFIG.threshold,
+    fadingFloor: opts.fadingFloor ?? DEFAULT_CONFIG.fadingFloor,
+    halfLifeDays: opts.halfLifeDays ?? DEFAULT_CONFIG.halfLifeDays,
+    activeDays: opts.activeDays ?? DEFAULT_CONFIG.activeDays
+  };
   const fill = {
     __HEADER__: renderHeader(m),
     __TREEMAP__: renderTreemap(m.zones),
     __TABLE__: renderTable(m.zones),
-    __DATA__: safeJson(reportData(m, opts.threshold ?? DEFAULT_CONFIG.threshold))
+    __DATA__: safeJson(reportData(m, settings.threshold)),
+    __METHOD__: howEstimatesWork(m.mode, settings)
   };
-  return REPORT_TEMPLATE.replace(/__(HEADER|TREEMAP|TABLE|DATA)__/g, (k) => fill[k]);
+  return REPORT_TEMPLATE.replace(/__(HEADER|TREEMAP|TABLE|DATA|METHOD)__/g, (k) => fill[k]);
 }
 function writeReport(root, html) {
   const dir = join10(root, ".understanding");
@@ -3913,7 +3946,7 @@ function recordResult(root, r) {
     if (result === "pass") {
       for (const id of live) {
         const z = before.zones.find((x) => x.zone.id === id);
-        appendPass(root, before.me, { zone: id, level: Math.max(levelOf(before, id), 65), fingerprint: z.zone.fingerprint, date, kind: "handoff" });
+        appendPass(root, before.me, { zone: id, level: Math.max(levelOf(before, id), HANDOFF_PASS_LEVEL), fingerprint: z.zone.fingerprint, date, kind: "handoff" });
       }
       for (const id of zoneIds) removeFlag(root, id, "unreviewed-agent-code");
     } else if (result === "miss") {
@@ -3925,11 +3958,11 @@ function recordResult(root, r) {
       const z = before.zones.find((x) => x.zone.id === id);
       const current = levelOf(before, id);
       if (result === "pass") {
-        appendPass(root, before.me, { zone: id, level: Math.max(current, 80), fingerprint: z.zone.fingerprint, date, kind: "session" });
+        appendPass(root, before.me, { zone: id, level: Math.max(current, SESSION_PASS_LEVEL), fingerprint: z.zone.fingerprint, date, kind: "session" });
         removeFlag(root, id, "hard-to-verify");
         removeFlag(root, id, "unreviewed-agent-code");
       } else if (result === "partial") {
-        appendLocalPartial(root, { zone: id, level: Math.max(current, 50), fingerprint: z.zone.fingerprint, date, kind: "session" });
+        appendLocalPartial(root, { zone: id, level: Math.max(current, PARTIAL_LEVEL), fingerprint: z.zone.fingerprint, date, kind: "session" });
         appendAttempt(root, { zone: id, kind: "session", result: "partial", date });
       } else {
         appendAttempt(root, { zone: id, kind: "session", result: "miss", date, retryAfter: new Date(now.getTime() + 3 * DAY2).toISOString() });
@@ -4153,12 +4186,13 @@ var commands = {
   }),
   map: guarded((root, args) => {
     ensureUnderstandingIgnore(root);
-    const m = buildMap(root, { reviewsByPath: optionalReviews(root, loadConfig(root)) });
+    const config = loadConfig(root);
+    const m = buildMap(root, { reviewsByPath: optionalReviews(root, config) });
     const { flags } = parseArgs(args);
     let reportPath = null;
     if (!flags.has("--no-report")) {
       try {
-        reportPath = writeReport(root, renderReport(m, { threshold: loadConfig(root).threshold }));
+        reportPath = writeReport(root, renderReport(m, config));
       } catch (e) {
         err(`Could not write the HTML report: ${e.message.split("\n")[0]}`);
       }
