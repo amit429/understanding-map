@@ -1,8 +1,9 @@
-import { dirname } from 'node:path';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
 import { addFlag, appendAttempt, appendLocalPartial, appendPass, removeFlag } from './events.js';
 import { markChecked, uncheckedEdits } from './editlog.js';
 import { buildMap } from './pipeline.js';
-import { loadConfig } from './config.js';
+import { loadConfig, umDir } from './config.js';
 import { excludeMatcher, readZoneCache } from './zones.js';
 import type { EditLogEntry, ZoneState } from './types.js';
 import { HANDOFF_PASS_LEVEL, PARTIAL_LEVEL, SESSION_PASS_LEVEL } from './weights.js';
@@ -43,6 +44,23 @@ export function handoffSet(root: string): { totalLines: number; zones: Array<{ z
   };
 }
 
+const lastLearnPath = (root: string) => join(umDir(root), 'local', 'last-learn.json');
+
+/** The zone of this person's last learning session (any result). Local only, never shared. */
+export function readLastLearn(root: string): { zone: string; date: string } | null {
+  try {
+    const v = JSON.parse(readFileSync(lastLearnPath(root), 'utf8')) as { zone?: unknown; date?: unknown };
+    return typeof v.zone === 'string' && typeof v.date === 'string' ? { zone: v.zone, date: v.date } : null;
+  } catch {
+    return null;
+  }
+}
+
+function writeLastLearn(root: string, zone: string, date: string): void {
+  mkdirSync(dirname(lastLearnPath(root)), { recursive: true });
+  writeFileSync(lastLearnPath(root), JSON.stringify({ zone, date }));
+}
+
 function clearHandoff(root: string, edits: EditLogEntry[]): void {
   if (edits.length) markChecked(root, edits.reduce((m, e) => (e.ts > m ? e.ts : m), ''));
 }
@@ -74,6 +92,7 @@ export function recordResult(
     }
     clearHandoff(root, handoff.edits);
   } else {
+    if (r.zones[0]) writeLastLearn(root, r.zones[0], date);
     for (const id of live) {
       const z = before.zones.find((x) => x.zone.id === id)!;
       const current = levelOf(before, id);

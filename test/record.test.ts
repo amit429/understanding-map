@@ -1,10 +1,10 @@
-import { existsSync, readdirSync, readFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { appendEdit, uncheckedEdits } from '../src/editlog';
 import { addFlag, appendPass, readFlags, removeFlag } from '../src/events';
 import { buildMap } from '../src/pipeline';
-import { gradeSession, handoffSet, markUnverifiable, recordResult, skipHandoff } from '../src/record';
+import { gradeSession, handoffSet, markUnverifiable, readLastLearn, recordResult, skipHandoff } from '../src/record';
 import { daysAgo, emptyHome, fixture, NOW } from './helpers/fixture';
 
 const lines = (p: string) => (existsSync(p) ? readFileSync(p, 'utf8').trim().split('\n').map((l) => JSON.parse(l)) : []);
@@ -167,5 +167,24 @@ describe('handoff', () => {
     const { root } = setup();
     markUnverifiable(root, 'agent');
     expect(readFlags(root)).toEqual({ agent: ['hard-to-verify'] });
+  });
+});
+
+describe('last learn session', () => {
+  it.each([['pass', 'pass'], ['partial', 'partial'], ['miss', 'miss']] as const)('a session (%s) writes local/last-learn.json with the zone and date', (g1, g2) => {
+    const { root, home } = setup();
+    expect(readLastLearn(root)).toBeNull();
+    recordResult(root, { kind: 'session', zones: ['agent'], grades: [g1, g2], now: NOW, homeDir: home });
+    expect(JSON.parse(readFileSync(um(root, 'local', 'last-learn.json'), 'utf8'))).toEqual({ zone: 'agent', date: NOW.toISOString() });
+    expect(readLastLearn(root)).toEqual({ zone: 'agent', date: NOW.toISOString() });
+  });
+
+  it('a handoff never writes it, and a malformed file reads as null', () => {
+    const { root, home } = setup();
+    edit(root, 'agent/a.ts', 60, daysAgo(1));
+    recordResult(root, { kind: 'handoff', zones: [], grades: ['pass'], now: NOW, homeDir: home });
+    expect(existsSync(um(root, 'local', 'last-learn.json'))).toBe(false);
+    writeFileSync(um(root, 'local', 'last-learn.json'), '{"zone": 3}');
+    expect(readLastLearn(root)).toBeNull();
   });
 });
