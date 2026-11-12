@@ -23,7 +23,9 @@ Next: /understanding-map:learn
 
 Agents now write much of the code that gets merged, often faster than anyone reads it. The gap between the code you have and the code anyone understands is **comprehension debt**. Git blame no longer measures it: when an agent commits under your name, you look like the expert on code you may never have read.
 
-Understanding Map works in a loop: **see the map → learn a zone → the map updates.**
+Understanding Map works in a loop: **see the map → learn a zone (and watch it, if pictures help) → the map updates.**
+
+**What's new in 0.2.0:** `/understanding-map:visualize`, a short 2D animation of any zone. It shows what the zone does for the product, then how it works inside, and every step is checked against the code before it's drawn.
 
 ---
 
@@ -48,13 +50,19 @@ claude plugin marketplace add amit429/understanding-map
 claude plugin install understanding-map@understanding-map
 ```
 
+To update to the latest version later:
+
+```
+/plugin marketplace update understanding-map
+```
+
 To try a local checkout without installing:
 
 ```bash
 claude --plugin-dir /path/to/understanding-map
 ```
 
-## Quick start (2 minutes)
+## Quick start (about 5 minutes)
 
 Open Claude Code inside any git repository and run:
 
@@ -63,6 +71,7 @@ Open Claude Code inside any git repository and run:
 | 1 | `/understanding-map:setup` | Choose **solo** (private, nothing shared) or **team** (share progress through git), and optionally name your critical paths. |
 | 2 | `/understanding-map:map` | Scans git history and the code, then prints the top 10 danger zones and writes `.understanding/report.html`. Open it in a browser for the treemap. |
 | 3 | `/understanding-map:learn` | A 5-minute session on the most dangerous zone: a short tour, then 2–3 questions you answer in your own words. Pass, and the zone turns from Dark to Owned. |
+| 4 | `/understanding-map:visualize` *(optional)* | A 60–90 second animation of the same zone, opened in your browser: the product journey, then the steps inside. Handy if a picture helps more than text. Watching doesn't change your level; only passing learn does. |
 
 After that, keep working as usual. When an agent changes 50+ lines, you'll see a one-line nudge:
 
