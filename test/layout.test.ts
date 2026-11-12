@@ -48,8 +48,13 @@ function textOk(t: TextBlock, original?: string) {
 }
 
 function checkLayout(l: Layout, inp: LayoutInput) {
-  const stage = { x: 0, y: 0, w: l.width, h: l.height };
   for (const [scene, items] of Object.entries(sceneRects(l))) {
+    if (!items.length) continue;
+    const h = l.heights[scene as keyof Layout['heights']];
+    const stage = { x: 0, y: 0, w: l.width, h };
+    const lowest = Math.max(...items.map((it) => it.rect.y + it.rect.h));
+    expect((h - lowest) / h, `${scene} leaves too much blank space below`).toBeLessThanOrEqual(0.25);
+    expect(l.height).toBeGreaterThanOrEqual(h);
     for (const it of items) {
       expect(inside(it.rect, stage), `${scene}/${it.name} leaves the stage`).toBe(true);
       if (it.within) expect(inside(it.rect, it.within), `${scene}/${it.name} leaves its container`).toBe(true);

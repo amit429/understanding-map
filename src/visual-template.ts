@@ -10,11 +10,12 @@ export const PLAYER_JS = String.raw`(function () {
   var data = JSON.parse(doc.getElementById('umap-data').textContent);
   var scenes = data.scenes, n = scenes.length, Z = data.zoom, journey = !!data.dot;
   var reduce = !!(window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches);
-  var idx = 0, t = 0, playing = !reduce, speed = 1, last = null, hold = 0;
+  // A page opened in a background tab waits, fully drawn, and starts when it is first shown.
+  var waiting = !reduce && !!doc.hidden;
+  var idx = 0, t = 0, playing = !reduce && !waiting, speed = 1, last = null, hold = 0, shownIdx = -1, prevScene = null;
   var $ = function (id) { return doc.getElementById(id); };
   var label = $('scene'), playBtn = $('play'), speedBtn = $('speed');
   var caps = [].slice.call(doc.querySelectorAll('.captions > li'));
-  var vb = function (s) { return s.split(' ').map(Number); };
   var svgs = [].slice.call(doc.querySelectorAll('svg.v')).map(function (s) {
     var layers = {};
     [].forEach.call(s.querySelectorAll('.layer'), function (l) { layers[l.getAttribute('data-layer')] = l; });
@@ -23,8 +24,8 @@ export const PLAYER_JS = String.raw`(function () {
       return { e: e, layer: e.parentNode.getAttribute('data-layer'), a: +e.getAttribute('data-a'), homeOnly: e.classList.contains('home-only'),
         lit: lit ? lit.split(' ').map(Number) : null, keep: e.hasAttribute('data-keep-lit') };
     });
-    return { s: s, layers: layers, els: els, full: vb(s.getAttribute('data-full')), zoom: vb(s.getAttribute('data-zoom')),
-      dot: s.querySelector('.dot'), pts: journey ? data.dot[s.classList.contains('v-w') ? 'w' : 'n'] : null };
+    var key = s.classList.contains('v-w') ? 'w' : 'n';
+    return { s: s, layers: layers, els: els, cam: data.cam[key], dot: s.querySelector('.dot'), pts: journey ? data.dot[key] : null };
   });
   function ease(x) { x = x < 0 ? 0 : x > 1 ? 1 : x; return x < 0.5 ? 2 * x * x : 1 - Math.pow(-2 * x + 2, 2) / 2; }
   function mix(a, b, k) { return a.map(function (v, i) { return v + (b[i] - v) * k; }); }
@@ -39,20 +40,30 @@ export const PLAYER_JS = String.raw`(function () {
     return null;
   }
   function render() {
-    var sc = scenes[idx].id;
+    var sc = scenes[idx].id, changed = sc !== prevScene;
+    prevScene = sc;
     var vis = { why: sc === 'why', journey: sc === 'journey' || sc === 'outro' || (sc === 'inside' && journey && t < Z),
       inside: sc === 'inside' && (!journey || t >= Z), outro: sc === 'outro' };
     svgs.forEach(function (v) {
-      for (var k in v.layers) v.layers[k].classList.toggle('show', !!vis[k]);
+      for (var k in v.layers) {
+        var l = v.layers[k], on = !!vis[k];
+        // On a scene change the outgoing layer goes at once (no fade), so the camera never shows it mid-zoom.
+        if (changed && !on && l.classList.contains('show')) {
+          l.classList.add('cut');
+          l.classList.remove('show');
+          getComputedStyle(l).opacity;
+          l.classList.remove('cut');
+        } else l.classList.toggle('show', on);
+      }
       v.els.forEach(function (x) {
         var home = x.layer === sc;
         var on = !!vis[x.layer] && (home ? t >= x.a : !x.homeOnly);
         x.e.classList.toggle('on', on);
         if (x.lit) x.e.classList.toggle('lit', on && (home ? t >= x.lit[0] && t < x.lit[1] : x.keep));
       });
-      var box = v.full;
-      if (journey && sc === 'inside' && t < Z) box = mix(v.full, v.zoom, ease(t / Z));
-      if (journey && sc === 'outro' && t < Z) box = mix(v.zoom, v.full, ease(t / Z));
+      var c = v.cam, box = [0, 0, c.w, c.h[sc]];
+      if (journey && sc === 'inside' && t < Z) box = mix(box, c.zin, ease(t / Z));
+      if (journey && sc === 'outro' && t < Z) box = mix(c.zout, box, ease(t / Z));
       v.s.setAttribute('viewBox', box.join(' '));
       if (v.dot) {
         var p = sc === 'journey' ? dotAt(v.pts) : null;
@@ -60,11 +71,20 @@ export const PLAYER_JS = String.raw`(function () {
         v.dot.classList.toggle('on', !!p);
       }
     });
-    label.textContent = 'Scene ' + (idx + 1) + ' of ' + n + ': ' + scenes[idx].title.replace(/^\d+ · /, '');
-    caps.forEach(function (c, i) { c.classList.toggle('current', i === idx); });
+    if (shownIdx !== idx) {
+      shownIdx = idx;
+      label.textContent = 'Scene ' + (idx + 1) + ' of ' + n + ': ' + scenes[idx].title.replace(/^\d+ · /, '');
+      caps.forEach(function (c, i) { c.classList.toggle('current', i === idx); });
+    }
   }
-  function go(i) { idx = (i + n) % n; t = reduce ? scenes[idx].duration : 0; hold = 0; render(); }
-  function setPlaying(p) { playing = p && !reduce; playBtn.textContent = playing ? 'Pause' : 'Play'; playBtn.setAttribute('aria-pressed', String(playing)); }
+  // Without a running clock (paused, reduced motion) a scene is shown complete; while playing it starts from 0.
+  function go(i) { idx = (i + n) % n; t = playing ? 0 : scenes[idx].duration; hold = 0; render(); }
+  function setPlaying(p) {
+    playing = p && !reduce;
+    if (playing && t >= scenes[idx].duration) { t = 0; hold = 0; render(); }
+    playBtn.textContent = playing ? 'Pause' : 'Play';
+    playBtn.setAttribute('aria-pressed', String(playing));
+  }
   function tick(now) {
     if (playing && last !== null) {
       t += Math.min(0.1, (now - last) / 1000) * speed;
@@ -80,7 +100,7 @@ export const PLAYER_JS = String.raw`(function () {
   $('restart').addEventListener('click', function () { go(0); });
   $('prev').addEventListener('click', function () { go(idx - 1); });
   $('next').addEventListener('click', function () { go(idx + 1); });
-  playBtn.addEventListener('click', function () { setPlaying(!playing); });
+  playBtn.addEventListener('click', function () { waiting = false; setPlaying(!playing); });
   speedBtn.addEventListener('click', function () {
     speed = speed === 1 ? 1.5 : 1;
     speedBtn.textContent = speed === 1 ? '1×' : '1.5×';
@@ -89,7 +109,10 @@ export const PLAYER_JS = String.raw`(function () {
   doc.addEventListener('keydown', function (e) {
     if (e.key === 'ArrowRight') go(idx + 1);
     else if (e.key === 'ArrowLeft') go(idx - 1);
-    else if ((e.key === ' ' || e.key === 'k') && !(e.target && e.target.tagName === 'BUTTON')) { e.preventDefault(); setPlaying(!playing); }
+    else if ((e.key === ' ' || e.key === 'k') && !(e.target && e.target.tagName === 'BUTTON')) { e.preventDefault(); waiting = false; setPlaying(!playing); }
+  });
+  doc.addEventListener('visibilitychange', function () {
+    if (waiting && !doc.hidden) { waiting = false; idx = 0; t = 0; setPlaying(true); render(); }
   });
   if (reduce) doc.documentElement.classList.add('reduced');
   setPlaying(playing);
@@ -143,6 +166,7 @@ code { font-family: var(--mono); font-size: 0.88em; background: var(--surface); 
 .st-unknown { --st: var(--unknown); --on-st: var(--on-unknown); }
 .stage-bg { fill: var(--surface); }
 .layer { opacity: 0; transition: opacity .35s ease; }
+.layer.cut { transition: none; }
 .layer.show { opacity: 1; }
 .el { opacity: 0; transition: opacity .45s ease, transform .45s ease; }
 .el.on { opacity: 1; }

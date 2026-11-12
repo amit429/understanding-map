@@ -47,7 +47,9 @@ export interface JourneyLayout {
 export interface StepRow { rect: Rect; num: { cx: number; cy: number; r: number; size: number }; label: TextBlock; chip: Pill }
 export interface Layout {
   width: number;
+  /** The tallest scene; each scene's own height is in `heights` (the player sizes the stage per scene). */
   height: number;
+  heights: Record<'why' | 'journey' | 'inside' | 'outro', number>;
   why: { heading: TextBlock; zone: TextBlock; badge: Pill; reason: TextBlock };
   journey: JourneyLayout | null;
   inside: { heading: TextBlock; title: TextBlock; rows: StepRow[] };
@@ -175,21 +177,21 @@ interface Metrics {
   zone: number; badge: number; body: number; whyTop: number;
   labelSizes: number[]; pillSizes: number[]; roleSizes: number[]; roleLines: number; chip: number;
   stepSizes: number[]; insideTitle: number; gotchaSizes: number[]; closing: number;
-  boxPadX: number; boxPadY: number; minHeight: number;
+  boxPadX: number; boxPadY: number;
 }
 
 const METRICS: Record<'wide' | 'narrow', Metrics> = {
   wide: {
-    M: 32, headingY: 24, heading: 16, zone: 44, badge: 18, body: 24, whyTop: 150,
+    M: 32, headingY: 24, heading: 16, zone: 44, badge: 18, body: 24, whyTop: 110,
     labelSizes: [16, 15, 14, 13, 12], pillSizes: [15, 14, 13, 12], roleSizes: [20, 19, 18, 17, 16, 15], roleLines: 3, chip: 14,
     stepSizes: [19, 18, 17, 16, 15], insideTitle: 24, gotchaSizes: [20, 19, 18, 17, 16], closing: 20,
-    boxPadX: 10, boxPadY: 12, minHeight: 720,
+    boxPadX: 10, boxPadY: 12,
   },
   narrow: {
-    M: 12, headingY: 14, heading: 14, zone: 26, badge: 15, body: 17, whyTop: 84,
+    M: 12, headingY: 14, heading: 14, zone: 26, badge: 15, body: 17, whyTop: 70,
     labelSizes: [14, 13, 12, 11], pillSizes: [14, 13, 12, 11], roleSizes: [15, 14, 13, 12], roleLines: 4, chip: 12,
     stepSizes: [16, 15, 14, 13], insideTitle: 17, gotchaSizes: [16, 15, 14, 13], closing: 15,
-    boxPadX: 8, boxPadY: 10, minHeight: 640,
+    boxPadX: 8, boxPadY: 10,
   },
 };
 
@@ -212,7 +214,7 @@ function layoutJourney(j: NonNullable<LayoutInput['journey']>, heading: TextBloc
   const pillSize = fitOrFail(pillItems, pillTextMax, m.pillSizes, 2, {}, 'in its pill');
   const pst: TextStyle = { size: pillSize };
 
-  const pillsTop = bottom(heading) + (narrow ? 22 : 96);
+  const pillsTop = bottom(heading) + (narrow ? 22 : 56);
   const rowX0 = narrow ? m.M : (W - (n * boxW + (n - 1) * gap)) / 2;
   const slot = (i: number) => {
     if (!narrow) return { col: i, row: 0 };
@@ -346,14 +348,17 @@ function layoutAt(input: LayoutInput, W: number): Layout {
   const closing = block(input.closing, m.M, closingTop, rowW, { size: m.closing, bold: true }, 'middle');
   const outro = { heading: oHeading, gotcha, closing };
 
-  const ends = [
-    bottom(reason),
-    bottom(closing),
-    ...(journey ? [bottom(journey.roleRef.rect)] : []),
-    ...rows.map((r) => bottom(r.rect)),
-  ];
-  const height = Math.ceil(Math.max(m.minHeight, Math.max(...ends) + (narrow ? 28 : 40)));
-  return { width: W, height, why, journey, inside, outro };
+  // Each scene is exactly as tall as its content plus a margin, so none ends in a large blank band.
+  const margin = narrow ? 28 : 40;
+  const fit = (y: number) => Math.ceil(y + margin);
+  const heights = {
+    why: fit(bottom(reason)),
+    journey: journey ? fit(bottom(journey.roleRef.rect)) : 0,
+    inside: fit(Math.max(...rows.map((r) => bottom(r.rect)))),
+    outro: fit(bottom(closing)),
+  };
+  const height = Math.max(heights.why, heights.journey, heights.inside, heights.outro);
+  return { width: W, height, heights, why, journey, inside, outro };
 }
 
 /** Lays out every scene at one stage width (WIDE or NARROW). Throws FitError when a label cannot fit. */

@@ -137,7 +137,6 @@ const g = (body: string, a: number, cls = '', extra: Record<string, string | num
 
 function svg(l: Layout, tl: Timeline, state: ZoneState, variant: 'w' | 'n'): string {
   const marker = `ah-${variant}`;
-  const full = `0 0 ${l.width} ${l.height}`;
   const parts: string[] = [];
   parts.push(`<defs><marker id="${marker}" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="ah" d="M0,0 L10,5 L0,10 z"/></marker></defs>`);
   parts.push(`<rect class="stage-bg" x="0" y="0" width="${l.width}" height="${l.height}"/>`);
@@ -190,10 +189,30 @@ function svg(l: Layout, tl: Timeline, state: ZoneState, variant: 'w' | 'n'): str
     : '';
   parts.push(`<g class="layer" data-layer="outro">` + g(text(o.heading, 'h'), 0) + gotcha + g(text(o.closing, 'closing'), tl.outro.closing) + `</g>`);
 
-  const target = j ? j.target : null;
-  const pad = 24;
-  const zoomTo = target ? `${n2(target.x - pad)} ${n2(target.y - pad)} ${n2(target.w + 2 * pad)} ${n2(target.h + 2 * pad)}` : full;
-  return `<svg class="v v-${variant}" viewBox="${full}" data-full="${full}" data-zoom="${zoomTo}" preserveAspectRatio="xMidYMid meet" aria-hidden="true" focusable="false">${parts.join('')}</svg>`;
+  return `<svg class="v v-${variant}" viewBox="0 0 ${l.width} ${l.heights.why}" preserveAspectRatio="xMidYMid meet" aria-hidden="true" focusable="false">${parts.join('')}</svg>`;
+}
+
+/** A box around `r` (plus padding) widened or heightened to the aspect ratio width : height, centred on `r`. */
+function fitAspect(r: Rect, width: number, height: number, pad = 24): number[] {
+  let [x, y, w, h] = [r.x - pad, r.y - pad, r.w + 2 * pad, r.h + 2 * pad];
+  const aspect = width / height;
+  if (w / h < aspect) { const nw = h * aspect; x -= (nw - w) / 2; w = nw; }
+  else { const nh = w / aspect; y -= (nh - h) / 2; h = nh; }
+  return [x, y, w, h].map((v) => Math.round(v * 100) / 100);
+}
+
+/**
+ * Camera data for the player: each scene's own height (the stage is sized per scene), and the zoom boxes into and
+ * out of the target, shaped like the scene they belong to so the stage never changes size mid-zoom.
+ */
+function camera(l: Layout) {
+  const t = l.journey?.target;
+  return {
+    w: l.width,
+    h: { ...l.heights, journey: l.heights.journey || l.heights.why },
+    zin: t ? fitAspect(t, l.width, l.heights.inside) : null,
+    zout: t ? fitAspect(t, l.width, l.heights.outro) : null,
+  };
 }
 
 // ---- captions (readable without playing) ------------------------------------------------------------------------
@@ -240,6 +259,7 @@ export function renderVisual(sb: Storyboard, z: LiveZone, generatedAt: string): 
       w: wide.journey!.arrows.map(([a, b]) => [a.x, a.y, b.x, b.y].map((v) => Math.round(v * 10) / 10)),
       n: narrow.journey!.arrows.map(([a, b]) => [a.x, a.y, b.x, b.y].map((v) => Math.round(v * 10) / 10)),
     } : null,
+    cam: { w: camera(wide), n: camera(narrow) },
     storyboard: sb,
   };
   const fill: Record<string, string> = {

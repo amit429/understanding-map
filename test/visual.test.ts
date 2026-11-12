@@ -109,6 +109,21 @@ describe('renderVisual', () => {
   });
 });
 
+describe('camera data', () => {
+  it('gives each scene its own height and zoom boxes with that scene\'s aspect ratio', () => {
+    const d = data(renderVisual(sb(), live, 'd').html);
+    for (const v of ['w', 'n'] as const) {
+      const c = d.cam[v];
+      expect(c.w).toBe(v === 'w' ? 1280 : 375);
+      for (const id of ['why', 'journey', 'inside', 'outro']) expect(c.h[id]).toBeGreaterThan(100);
+      expect(c.zin[2] / c.zin[3]).toBeCloseTo(c.w / c.h.inside, 3);
+      expect(c.zout[2] / c.zout[3]).toBeCloseTo(c.w / c.h.outro, 3);
+    }
+    const html = renderVisual(sb(), live, 'd').html;
+    expect(html).toContain(`viewBox="0 0 1280 ${d.cam.w.h.why}"`);
+  });
+});
+
 describe('scene 1', () => {
   const whyText = (html: string) => {
     const svg = html.slice(html.indexOf('<svg class="v v-w"'));
