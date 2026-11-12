@@ -108,6 +108,17 @@ The **danger rank** combines how dark a zone is with how critical it is: how man
 - **Fair:** each answer is graded pass, partial or miss with an explanation. Two or more passes and no misses counts as a pass. A partial never lowers your level.
 - **Low pressure:** stop at any time and nothing is recorded.
 
+## Seeing a zone: `/understanding-map:visualize`
+
+After a session, or before one, `/understanding-map:visualize src/payments` builds a 60–90 second animation of one zone and writes it to `.understanding/local/visuals/<zone>.html`. Open it in a browser:
+
+1. **Why this matters:** the zone, its state and how many files depend on it.
+2. **Product journey:** one real user action (for example "User clicks Pay") travels box to box until this zone does its job.
+3. **Inside the zone:** its main steps light up in order, each with a `file:line` chip.
+4. **Back out:** one "watch out" note, then `Lock it in: /understanding-map:learn <zone>`.
+
+It plays, pauses, steps scene by scene and runs at 1× or 1.5×. With reduced motion turned on it shows still frames, and the scene captions under it read fine without playing. Claude reads only the zone and its neighbours and writes a storyboard; the same checker agent verifies every hop and step; the engine draws the page, so every visual looks the same and loads nothing over the network. Anything the checker can't confirm is left out. If the code hasn't changed, the saved visual is reused instantly. Watching never changes the map: only a passed session does.
+
 ## Solo and team mode
 
 Everything lives in `.understanding/` at the root of your repo.
@@ -172,8 +183,8 @@ Setup adds `merge=union` rules to `.gitattributes`, so these append-only files m
 
 The plugin has two halves:
 
-- **A deterministic engine.** About 2,600 lines of TypeScript bundled into `dist/umap.js`. It does the git analysis, zoning, scoring and storage, and makes no model calls.
-- **Model-driven playbooks.** Five skills and one checker agent handle explaining, asking and grading.
+- **A deterministic engine.** About 4,000 lines of TypeScript bundled into `dist/umap.js`. It does the git analysis, zoning, scoring, storage and the drawing of animations, and makes no model calls.
+- **Model-driven playbooks.** Six skills and one checker agent handle explaining, asking, grading and storyboarding.
 
 Two hooks record agent edits and show the handoff nudge. For a full walkthrough of how a Claude Code plugin is put together, using this one as the example, read **[docs/how-it-works.md](docs/how-it-works.md)**. The design spec is in [docs/specs/](docs/specs/).
 

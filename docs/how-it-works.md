@@ -5,7 +5,7 @@ A Claude Code plugin is a folder that Claude Code reads when it starts. It does 
 | Part | What it is | What Claude Code does with it | In this plugin |
 |---|---|---|---|
 | **Manifest** | `.claude-plugin/plugin.json` | Reads the plugin's name, version and metadata. The name becomes the command prefix (`/understanding-map:…`). | `name: understanding-map` |
-| **Skills** | `skills/<name>/SKILL.md`: a Markdown playbook with YAML frontmatter | Lists each skill's `description` for the model. When you type the slash command, or a request matches the description, Claude Code loads the full playbook into the conversation, and the model follows it using its normal tools (Bash, Read, …). | `setup`, `map`, `learn`, `handoff`, `who` |
+| **Skills** | `skills/<name>/SKILL.md`: a Markdown playbook with YAML frontmatter | Lists each skill's `description` for the model. When you type the slash command, or a request matches the description, Claude Code loads the full playbook into the conversation, and the model follows it using its normal tools (Bash, Read, …). | `setup`, `map`, `learn`, `handoff`, `who`, `visualize` |
 | **Agents** | `agents/<name>.md`: a system prompt plus an allowed tool list | Lets the main model start a *subagent*: a fresh model instance with its own context and only the tools listed. It reports back once. | `answer-key-checker` (tools: Read, Grep, Glob) |
 | **Hooks** | `hooks/hooks.json`: shell commands bound to lifecycle events | Runs the command itself, outside the model, whenever the event fires. It pipes event JSON to the command's stdin and reads JSON back from stdout. | `PostToolUse` on edits, `Stop` after each reply |
 
@@ -31,14 +31,16 @@ flowchart LR
   D --> G[git history]
 ```
 
-**The engine** (`src/` → bundled into `dist/umap.js`, about 2,600 lines of TypeScript) is a plain Node CLI. It does everything that must be fast, repeatable and free:
+**The engine** (`src/` → bundled into `dist/umap.js`, about 4,000 lines of TypeScript) is a plain Node CLI. It does everything that must be fast, repeatable and free:
 
 - `git.ts` reads history: who changed which files, and which commits carry agent co-author trailers.
 - `zones.ts` groups files into zones (one per folder, with big folders split and tiny ones merged).
-- `imports.ts` finds how many other files import each zone, using a regex for each of 8 languages.
+- `imports.ts` finds how many other files import each zone, using a regex for each of 8 languages, and lists each import edge with its line number.
 - `attribution.ts` and `editlog.ts` record which lines agents wrote.
 - `scoring.ts` turns all of that into an understanding level per person per zone, a state (Owned / Fragile / Fading / Dark / Unknown) and a danger rank. Every number lives in `weights.ts`.
-- `report.ts` writes the HTML treemap. `record.ts` saves session results. `cli.ts` exposes all of it as commands with `--json` output.
+- `report.ts` writes the HTML treemap. `record.ts` saves session results.
+- `context.ts`, `storyboard.ts`, `layout.ts` and `visual.ts` power `visualize`: a zone's neighbours and likely entry points, storyboard validation, box-and-text geometry, and the self-contained animation page.
+- `cli.ts` exposes all of it as commands with `--json` output.
 
 The engine never calls a model. That is why `map` takes about 0.2 s on a 100k-line repo and costs no tokens.
 
@@ -55,6 +57,18 @@ The engine never calls a model. That is why `map` takes about 0.2 s on a 100k-li
 7. **Record (engine).** The model runs `umap.js record --kind session --zones "<zone>" --grades pass,partial,pass`. The engine applies the grading rule, appends a pass event (shared in team mode) or a local partial/miss, and prints `Result: pass` plus `payments: Dark → Owned`.
 
 The model handles judgement; the engine owns state and the rules. The model can't quietly change a score, because only the engine writes to `.understanding/`.
+
+## What happens when you run `/understanding-map:visualize`
+
+The same split, applied to a picture:
+
+1. **Context (engine).** `umap.js context "<zone>" --json` returns the zone, the zones that import it and that it imports (with the import lines and their line numbers) and files that look like entry points (routes, handlers, pages, `main`). This bounds what the model reads. With no argument it uses the zone of your last learning session.
+2. **Cache (engine).** `umap.js visualize "<zone>" --cached --json` reuses the saved storyboard if none of the files it depends on has changed.
+3. **Storyboard (model).** The model reads the zone and those neighbours and writes a small JSON storyboard: the journey of one user action through real zones, 3–7 steps inside the zone, and an optional gotcha, every item with a `file:line`.
+4. **Verify (subagent).** `answer-key-checker` checks every hop, the zone's role, each step, their order and the gotcha. Unconfirmed items are regenerated once, then dropped; with fewer than 3 confirmed steps there is no visual.
+5. **Render (engine).** `umap.js visualize "<zone>" --storyboard <file>` validates the storyboard (limits, refs inside the repository, steps inside the zone, journey stops on real zones), lays every box out in code at 1280 and 375 px wide, and writes one HTML file with an inlined, hand-written player. The model never writes HTML.
+
+Nothing is recorded: watching never raises a level.
 
 ## What the hooks do, which the model never sees
 
@@ -74,7 +88,8 @@ Everything goes into `.understanding/` in your repo, which keeps the plugin stat
   .gitignore             what stays private                           (committed in team mode)
   events/<handle>.jsonl  passed sessions only, append-only            (committed in team mode)
   agent-share/<id>.jsonl anonymous {zone, agentLines, week} totals    (committed in team mode)
-  local/                 edit log, failed attempts, flags, caches     (never committed)
+  local/                 edit log, failed attempts, flags, caches,    (never committed)
+                         last-learn.json, visuals/<zone>.html + .json
   report.html            generated treemap                            (never committed)
 ```
 
@@ -90,7 +105,7 @@ Team mode is just git. Each person appends only to their own file, and `merge=un
 
 ```
 src/*.ts  ──esbuild──▶  dist/umap.js        (npm run build)
-test/*.test.ts  ──vitest──▶  218 tests      (npm test)
+test/*.test.ts  ──vitest──▶  380 tests      (npm test)
 claude plugin validate .                    (manifest, skills, agents, hooks)
 ```
 
