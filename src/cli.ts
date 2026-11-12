@@ -1,7 +1,8 @@
 import { realpathSync } from 'node:fs';
-import { relative, resolve } from 'node:path';
+import { relative } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { ensureUnderstandingIgnore, isSetUp, loadConfig } from './config.js';
+import { pickZone, targetPath, zoneContext } from './context.js';
 import { repoRootOf } from './git.js';
 import { onPostToolUse, onStop } from './hooks.js';
 import { buildMap } from './pipeline.js';
@@ -52,10 +53,7 @@ function guarded(body: (root: string, args: string[]) => Promise<number> | numbe
 function findZone(m: MapResult, root: string, target: string): ZoneResult | null {
   const byId = m.zones.find((z) => z.zone.id === target);
   if (byId) return byId;
-  let cwd = process.cwd();
-  try { cwd = realpathSync(cwd); } catch { /* keep as is */ }
-  const rel = relative(root, resolve(cwd, target)).split('\\').join('/');
-  const path = rel === '' ? target : rel.replace(/^\.\//, '');
+  const path = targetPath(root, target);
   const file = m.zones.find((z) => z.zone.files.includes(path));
   if (file) return file;
   const dir = path.replace(/\/+$/, '') + '/';
@@ -263,6 +261,33 @@ export const commands: Record<string, Command> = {
   'handoff-skip': guarded((root) => {
     skipHandoff(root);
     out('Skipped the handoff check; touched zones are flagged as unreviewed agent code.');
+    return 0;
+  }),
+
+  context: guarded((root, args) => {
+    const { flags, positional } = parseArgs(args);
+    const m = buildMap(root);
+    const p = pickZone(m, root, positional[0]);
+    if (!p.zone) {
+      if (positional[0]) {
+        err(p.why);
+        return 1;
+      }
+      out(flags.has('--json') ? JSON.stringify({ zone: null, why: p.why }) : p.why);
+      return 0;
+    }
+    const c = zoneContext(root, m, p.zone, p.picked);
+    if (flags.has('--json')) out(JSON.stringify(c));
+    else {
+      const names = (ns: typeof c.inbound) => (ns.length ? ns.map((n) => n.zone).join(', ') : 'none');
+      out([
+        `${c.zone.id} — ${c.picked.note}`,
+        `Files: ${c.zone.files.length} · ${c.zone.loc} lines · ${c.zone.fanIn} importing file(s)`,
+        `Imported by: ${names(c.inbound)}`,
+        `Imports: ${names(c.outbound)}`,
+        `Entry hints: ${c.entryHints.length ? c.entryHints.map((h) => h.file).join(', ') : 'none'}`,
+      ].join('\n'));
+    }
     return 0;
   }),
 

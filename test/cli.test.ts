@@ -230,3 +230,30 @@ describe('cached reviews in every command', () => {
     expect(reviewed((await run(dir, ['zone', 'human', '--json'])).stdout)).toBe(true);
   });
 });
+
+describe('cli context', () => {
+  it('context --json prints the zone, neighbours, entry hints and fingerprint', async () => {
+    const { journeyRepo } = await import('./helpers/journey');
+    const root = journeyRepo();
+    const r = await run(root, ['context', 'src/payments', '--json']);
+    expect(r.code).toBe(0);
+    const j = JSON.parse(r.stdout);
+    expect(j.zone.id).toBe('src/payments');
+    expect(j.inbound[0].zone).toBe('src/api');
+    expect(j.outbound[0].imports[0]).toMatchObject({ from: 'src/payments/ledger.ts', line: 1 });
+    expect(Object.keys(j.fingerprint)).toHaveLength(3);
+    const none = await run(root, ['context', '--json']);
+    expect(JSON.parse(none.stdout)).toMatchObject({ zone: { id: 'src/payments' }, picked: { by: 'top-danger' } });
+  });
+
+  it('context text names the zone and why; an unknown target exits 1', async () => {
+    const { journeyRepo } = await import('./helpers/journey');
+    const root = journeyRepo();
+    const t = await run(root, ['context', 'src']);
+    expect(t.stdout).toContain('src/payments');
+    expect(t.stdout).toContain('spans 3 zones');
+    const u = await run(root, ['context', 'nope', '--json']);
+    expect(u.code).toBe(1);
+    expect(u.stderr).toContain('No zone found for "nope"');
+  });
+});
