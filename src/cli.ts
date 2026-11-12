@@ -5,6 +5,7 @@ import { ensureUnderstandingIgnore, isSetUp, loadConfig } from './config.js';
 import { repoRootOf } from './git.js';
 import { onPostToolUse, onStop } from './hooks.js';
 import { buildMap } from './pipeline.js';
+import { ghAvailable, reviewCounts } from './reviews.js';
 import { renderReport, writeReport } from './report.js';
 import { handoffSet, markUnverifiable, recordResult, skipHandoff, type Grade } from './record.js';
 import { runSetup } from './setup.js';
@@ -59,6 +60,16 @@ function findZone(m: MapResult, root: string, target: string): ZoneResult | null
   if (file) return file;
   const dir = path.replace(/\/+$/, '') + '/';
   return m.zones.find((z) => z.zone.files.some((f) => f.startsWith(dir))) ?? null;
+}
+
+/** PR review signal via gh, when available. Optional: any failure yields no reviews and never affects the map. */
+function optionalReviews(root: string, m: MapResult): Record<string, Record<string, number>> {
+  try {
+    if (process.env.UMAP_NO_GH === '1' || !ghAvailable(root)) return {};
+    return reviewCounts(root, m.zones.map((z) => z.zone), loadConfig(root));
+  } catch {
+    return {};
+  }
 }
 
 const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
@@ -124,7 +135,9 @@ export const commands: Record<string, Command> = {
 
   map: guarded((root, args) => {
     ensureUnderstandingIgnore(root);
-    const m = buildMap(root);
+    let m = buildMap(root);
+    const reviews = optionalReviews(root, m);
+    if (Object.keys(reviews).length) m = buildMap(root, { reviews });
     const { flags } = parseArgs(args);
     let reportPath: string | null = null;
     if (!flags.has('--no-report')) {

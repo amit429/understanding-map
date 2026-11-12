@@ -9,6 +9,7 @@ import { emptyHome, fixture } from './helpers/fixture';
 async function run(cwd: string, argv: string[]) {
   vi.spyOn(process, 'cwd').mockReturnValue(cwd);
   vi.stubEnv('HOME', emptyHome());
+  vi.stubEnv('UMAP_NO_GH', '1');
   let stdout = '';
   let stderr = '';
   vi.spyOn(process.stdout, 'write').mockImplementation((s) => { stdout += String(s); return true; });
