@@ -1,6 +1,6 @@
 {
   "name": "understanding-map",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Find the code nobody on your team understands any more (comprehension debt from AI-written code) and learn it back through short, verified sessions.",
   "author": { "name": "amit429", "url": "https://github.com/amit429" },
   "homepage": "https://github.com/amit429/understanding-map",

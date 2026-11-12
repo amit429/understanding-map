@@ -105,7 +105,7 @@ Team mode is just git. Each person appends only to their own file, and `merge=un
 
 ```
 src/*.ts  ──esbuild──▶  dist/umap.js        (npm run build)
-test/*.test.ts  ──vitest──▶  380 tests      (npm test)
+test/*.test.ts  ──vitest──▶  423 tests      (npm test)
 claude plugin validate .                    (manifest, skills, agents, hooks)
 ```
 

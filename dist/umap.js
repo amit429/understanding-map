@@ -208,9 +208,9 @@ var require_constants = __commonJS({
       /**
        * Create EXTGLOB_CHARS
        */
-      extglobChars(chars) {
+      extglobChars(chars2) {
         return {
-          "!": { type: "negate", open: "(?:(?!(?:", close: `))${chars.STAR})` },
+          "!": { type: "negate", open: "(?:(?!(?:", close: `))${chars2.STAR})` },
           "?": { type: "qmark", open: "(?:", close: ")?" },
           "+": { type: "plus", open: "(?:", close: ")+" },
           "*": { type: "star", open: "(?:", close: ")*" },
@@ -594,9 +594,9 @@ var require_scan = __commonJS({
       if (opts.parts === true || opts.tokens === true) {
         let prevIndex;
         for (let idx = 0; idx < slashes.length; idx++) {
-          const n2 = prevIndex !== void 0 ? prevIndex + 1 : start;
+          const n3 = prevIndex !== void 0 ? prevIndex + 1 : start;
           const i = slashes[idx];
-          const value2 = input.slice(n2, i);
+          const value2 = input.slice(n3, i);
           if (opts.tokens) {
             if (idx === 0 && start !== 0) {
               tokens[idx].isPrefix = true;
@@ -807,13 +807,13 @@ var require_parse = __commonJS({
         }
       }
     };
-    var buildCharClassStar = (chars) => {
-      const source = chars.length === 1 ? utils.escapeRegex(chars[0]) : `[${chars.map((ch) => utils.escapeRegex(ch)).join("")}]`;
+    var buildCharClassStar = (chars2) => {
+      const source = chars2.length === 1 ? utils.escapeRegex(chars2[0]) : `[${chars2.map((ch) => utils.escapeRegex(ch)).join("")}]`;
       return `${source}*`;
     };
     var getStarExtglobSequenceChars = (pattern) => {
       let index2 = 0;
-      const chars = [];
+      const chars2 = [];
       while (index2 < pattern.length) {
         const match = parseRepeatedExtglob(pattern.slice(index2), false);
         if (!match || match.type !== "*") {
@@ -827,13 +827,13 @@ var require_parse = __commonJS({
         if (!branch || branch.length !== 1) {
           return;
         }
-        chars.push(branch);
+        chars2.push(branch);
         index2 += match.end + 1;
       }
-      if (chars.length < 1) {
+      if (chars2.length < 1) {
         return;
       }
-      return chars;
+      return chars2;
     };
     var repeatedExtglobRecursion = (pattern) => {
       let depth = 0;
@@ -861,10 +861,10 @@ var require_parse = __commonJS({
       let sawStarSequence = false;
       let combinable = true;
       for (const branch of branches) {
-        const chars = getStarExtglobSequenceChars(branch);
-        if (chars) {
+        const chars2 = getStarExtglobSequenceChars(branch);
+        if (chars2) {
           sawStarSequence = true;
-          safeChars.push(...chars);
+          safeChars.push(...chars2);
           continue;
         }
         const literal = normalizeSimpleBranch(branch);
@@ -1064,7 +1064,7 @@ var require_parse = __commonJS({
       };
       if (opts.fastpaths !== false && !/(^[*!]|[/()[\]{}"])/.test(input)) {
         let backslashes = false;
-        let output = input.replace(REGEX_SPECIAL_CHARS_BACKREF, (m, esc2, chars, first, rest, index2) => {
+        let output = input.replace(REGEX_SPECIAL_CHARS_BACKREF, (m, esc2, chars2, first, rest, index2) => {
           if (first === "\\") {
             backslashes = true;
             return m;
@@ -1076,10 +1076,10 @@ var require_parse = __commonJS({
             if (index2 === 0) {
               return qmarkNoDot + (rest ? QMARK.repeat(rest.length) : "");
             }
-            return QMARK.repeat(chars.length);
+            return QMARK.repeat(chars2.length);
           }
           if (first === ".") {
-            return DOT_LITERAL.repeat(chars.length);
+            return DOT_LITERAL.repeat(chars2.length);
           }
           if (first === "*") {
             if (esc2) {
@@ -1802,8 +1802,8 @@ var require_picomatch2 = __commonJS({
 });
 
 // src/cli.ts
-import { realpathSync as realpathSync2 } from "node:fs";
-import { relative as relative3, resolve as resolve2 } from "node:path";
+import { existsSync as existsSync4, readFileSync as readFileSync14, realpathSync as realpathSync4 } from "node:fs";
+import { relative as relative4, resolve as resolve3 } from "node:path";
 import { pathToFileURL } from "node:url";
 
 // src/config.ts
@@ -1897,215 +1897,19 @@ function ensureUnderstandingIgnore(root) {
   writeFileSync(file, team ? TEAM_IGNORE : SOLO_IGNORE);
 }
 
-// src/git.ts
-import { execFileSync } from "node:child_process";
-var GitError = class extends Error {
-  constructor(message, status, stderr) {
-    super(message);
-    this.status = status;
-    this.stderr = stderr;
-    this.name = "GitError";
-  }
-};
-function git(root, args) {
-  try {
-    return execFileSync("git", args, {
-      cwd: root,
-      encoding: "utf8",
-      env: { ...process.env, LC_ALL: "C" },
-      maxBuffer: 512 * 1024 * 1024,
-      stdio: ["ignore", "pipe", "pipe"]
-    });
-  } catch (e) {
-    const err2 = e;
-    const stderr = String(err2.stderr ?? "");
-    throw new GitError(`git ${args.join(" ")} failed: ${stderr.trim() || err2.message}`, err2.status ?? null, stderr);
-  }
-}
-function repoRootOf(cwd) {
-  try {
-    return git(cwd, ["rev-parse", "--show-toplevel"]).trim() || null;
-  } catch {
-    return null;
-  }
-}
-function listTrackedFiles(root) {
-  return git(root, ["ls-files", "-z"]).split("\0").filter(Boolean);
-}
-var AGENT_RE = /^co-authored-by:.*\b(claude|anthropic|copilot|cursor|codex|devin|aider|gemini|openai|windsurf|cline|jules)\b/im;
-function isAgentTrailer(message) {
-  return AGENT_RE.test(message);
-}
-function parseNumstat(body) {
-  const tokens = body.replace(/^[\n\0]+/, "").split("\0");
-  const files = [];
-  for (let i = 0; i < tokens.length; i++) {
-    const tok = tokens[i].replace(/^\n+/, "");
-    if (!tok) continue;
-    const m = /^(\d+|-)\t(\d+|-)\t(.*)$/s.exec(tok);
-    if (!m) continue;
-    let path = m[3];
-    if (path === "") {
-      path = tokens[i + 2] ?? "";
-      i += 2;
-    }
-    files.push({
-      path,
-      added: m[1] === "-" ? 0 : Number(m[1]),
-      deleted: m[2] === "-" ? 0 : Number(m[2])
-    });
-  }
-  return files;
-}
-function readHistory(root, sinceDays, now = /* @__PURE__ */ new Date()) {
-  const since = new Date(now.getTime() - sinceDays * 864e5).toISOString();
-  try {
-    git(root, ["rev-parse", "--verify", "-q", "HEAD"]);
-  } catch {
-    return [];
-  }
-  const out2 = git(root, [
-    "log",
-    "--no-merges",
-    "-M",
-    "-z",
-    "--numstat",
-    `--since=${since}`,
-    "--format=%x1e%H%x1f%ae%x1f%aI%x1f%B%x1f"
-  ]);
-  const commits = [];
-  for (const rec of out2.split("")) {
-    if (!rec.trim()) continue;
-    const [sha, email, date, message, body = ""] = rec.split("");
-    commits.push({
-      sha,
-      email,
-      date: new Date(date),
-      message,
-      agentTrailer: isAgentTrailer(message),
-      files: parseNumstat(body)
-    });
-  }
-  return commits;
-}
-function currentEmail(root) {
-  try {
-    return git(root, ["config", "user.email"]).trim();
-  } catch {
-    return "";
-  }
-}
-function defaultBranchRef(root) {
-  try {
-    const ref = git(root, ["symbolic-ref", "--short", "refs/remotes/origin/HEAD"]).trim();
-    if (ref) return ref;
-  } catch {
-  }
-  for (const ref of ["origin/main", "origin/master"]) {
-    try {
-      git(root, ["rev-parse", "--verify", "--quiet", `refs/remotes/${ref}`]);
-      return ref;
-    } catch {
-    }
-  }
-  return null;
-}
-function showAtRef(root, ref, path) {
-  try {
-    return git(root, ["show", `${ref}:${path}`]);
-  } catch {
-    return null;
-  }
-}
-function listAtRef(root, ref, dir) {
-  const d = dir.replace(/^\.\//, "").replace(/\/+$/, "");
-  try {
-    const args = ["ls-tree", "-r", "--name-only", "-z", ref];
-    if (d) args.push("--", `${d}/`);
-    return git(root, args).split("\0").filter(Boolean);
-  } catch {
-    return [];
-  }
-}
-function commitsWithNotes(root, notesRef) {
-  try {
-    const out2 = git(root, ["notes", `--ref=${notesRef}`, "list"]);
-    const set = /* @__PURE__ */ new Set();
-    for (const line of out2.split("\n")) {
-      const parts = line.trim().split(/\s+/);
-      if (parts[1]) set.add(parts[1]);
-    }
-    return set;
-  } catch {
-    return /* @__PURE__ */ new Set();
-  }
-}
+// src/context.ts
+import { readFileSync as readFileSync10, realpathSync } from "node:fs";
+import { join as join10, relative as relative2, resolve } from "node:path";
 
-// src/hooks.ts
-import { realpathSync } from "node:fs";
-import { dirname as dirname2, basename, isAbsolute, join as join4, relative, resolve } from "node:path";
-
-// src/editlog.ts
-import { appendFileSync, mkdirSync as mkdirSync2, readFileSync as readFileSync2, writeFileSync as writeFileSync2 } from "node:fs";
-import { join as join2 } from "node:path";
-var localDir = (root) => join2(umDir(root), "local");
-var editsPath = (root) => join2(localDir(root), "edits.jsonl");
-var handoffPath = (root) => join2(localDir(root), "handoff.json");
-function appendEdit(root, e) {
-  mkdirSync2(localDir(root), { recursive: true });
-  appendFileSync(editsPath(root), JSON.stringify(e) + "\n");
-}
-function readEdits(root) {
-  let text;
-  try {
-    text = readFileSync2(editsPath(root), "utf8");
-  } catch {
-    return [];
-  }
-  const out2 = [];
-  for (const line of text.split("\n")) {
-    if (!line.trim()) continue;
-    try {
-      out2.push(JSON.parse(line));
-    } catch {
-    }
-  }
-  return out2;
-}
-function readHandoff(root) {
-  try {
-    const v = JSON.parse(readFileSync2(handoffPath(root), "utf8"));
-    return {
-      checkedUpTo: typeof v.checkedUpTo === "string" ? v.checkedUpTo : "",
-      nudgedLines: typeof v.nudgedLines === "number" ? v.nudgedLines : 0
-    };
-  } catch {
-    return { checkedUpTo: "", nudgedLines: 0 };
-  }
-}
-function writeHandoff(root, h) {
-  mkdirSync2(localDir(root), { recursive: true });
-  writeFileSync2(handoffPath(root), JSON.stringify(h));
-}
-function uncheckedEdits(root) {
-  const { checkedUpTo } = readHandoff(root);
-  return readEdits(root).filter((e) => e.ts > checkedUpTo);
-}
-function markChecked(root, upToTs) {
-  writeHandoff(root, { checkedUpTo: upToTs, nudgedLines: 0 });
-}
-function getNudgedLines(root) {
-  return readHandoff(root).nudgedLines;
-}
-function setNudgedLines(root, n) {
-  writeHandoff(root, { ...readHandoff(root), nudgedLines: n });
-}
+// src/imports.ts
+import { readFileSync as readFileSync3 } from "node:fs";
+import { join as join3, posix } from "node:path";
 
 // src/zones.ts
 var import_picomatch = __toESM(require_picomatch2(), 1);
 import { createHash } from "node:crypto";
-import { mkdirSync as mkdirSync3, readFileSync as readFileSync3, statSync, writeFileSync as writeFileSync3 } from "node:fs";
-import { dirname, join as join3 } from "node:path";
+import { mkdirSync as mkdirSync2, readFileSync as readFileSync2, statSync, writeFileSync as writeFileSync2 } from "node:fs";
+import { dirname, join as join2 } from "node:path";
 var DEFAULT_EXCLUDES = [
   "**/node_modules/**",
   "**/dist/**",
@@ -2132,12 +1936,12 @@ function readFileEntries(root, paths, exclude) {
   const out2 = [];
   for (const path of paths) {
     if (isExcluded(path)) continue;
-    const full = join3(root, path);
+    const full = join2(root, path);
     let buf;
     try {
       const st = statSync(full);
       if (!st.isFile() || st.size > MAX_FILE_BYTES) continue;
-      buf = readFileSync3(full);
+      buf = readFileSync2(full);
     } catch {
       continue;
     }
@@ -2228,494 +2032,23 @@ function zoneIndex(zones) {
   return m;
 }
 function cachePath(root) {
-  return join3(umDir(root), "local", "zones-cache.json");
+  return join2(umDir(root), "local", "zones-cache.json");
 }
 function writeZoneCache(root, zones) {
   const path = cachePath(root);
-  mkdirSync3(dirname(path), { recursive: true });
-  writeFileSync3(path, JSON.stringify(Object.fromEntries(zoneIndex(zones))));
+  mkdirSync2(dirname(path), { recursive: true });
+  writeFileSync2(path, JSON.stringify(Object.fromEntries(zoneIndex(zones))));
 }
 function readZoneCache(root) {
   try {
-    const v = JSON.parse(readFileSync3(cachePath(root), "utf8"));
+    const v = JSON.parse(readFileSync2(cachePath(root), "utf8"));
     return typeof v === "object" && v !== null && !Array.isArray(v) ? v : null;
   } catch {
     return null;
   }
 }
 
-// src/hooks.ts
-var isObj2 = (v) => typeof v === "object" && v !== null && !Array.isArray(v);
-function lineCount(s) {
-  if (typeof s !== "string" || s === "") return 0;
-  const n = s.split("\n").length;
-  return s.endsWith("\n") ? n - 1 : n;
-}
-function repoRelative(root, file, cwd) {
-  const abs = isAbsolute(file) ? file : resolve(cwd, file);
-  const attempt = (p) => {
-    const rel = relative(root, p);
-    return rel === "" || rel.startsWith("..") || isAbsolute(rel) ? null : rel.split("\\").join("/");
-  };
-  const direct = attempt(abs);
-  if (direct) return direct;
-  try {
-    return attempt(join4(realpathSync(dirname2(abs)), basename(abs)));
-  } catch {
-    return null;
-  }
-}
-function rangesOf(response, input, tool) {
-  const patch = isObj2(response) && Array.isArray(response.structuredPatch) ? response.structuredPatch : null;
-  if (patch && patch.length > 0) {
-    const ranges = [];
-    let lines2 = 0;
-    for (const h of patch) {
-      if (!isObj2(h) || typeof h.newStart !== "number") continue;
-      if (Array.isArray(h.lines)) {
-        let n = h.newStart;
-        let runStart = -1;
-        const close = () => {
-          if (runStart >= 0) ranges.push([runStart, n - 1]);
-          runStart = -1;
-        };
-        for (const l of h.lines) {
-          const c = typeof l === "string" ? l[0] : "";
-          if (c === "+") {
-            if (runStart < 0) runStart = n;
-            n++;
-            lines2++;
-          } else if (c === "-") {
-            close();
-          } else {
-            close();
-            n++;
-          }
-        }
-        close();
-      } else if (typeof h.newLines === "number" && h.newLines > 0) {
-        ranges.push([h.newStart, h.newStart + h.newLines - 1]);
-        lines2 += h.newLines;
-      }
-    }
-    if (ranges.length > 0) return { ranges, lines: lines2 };
-  }
-  let lines = 0;
-  if (tool === "Write") lines = lineCount(input.content);
-  else if (tool === "MultiEdit" && Array.isArray(input.edits)) {
-    for (const e of input.edits) if (isObj2(e)) lines += lineCount(e.new_string);
-  } else if (tool === "NotebookEdit") lines = lineCount(input.new_source);
-  else lines = lineCount(input.new_string);
-  return { ranges: lines > 0 ? [[1, lines]] : [], lines };
-}
-function onPostToolUse(input) {
-  try {
-    if (!isObj2(input) || !isObj2(input.tool_input)) return;
-    const ti = input.tool_input;
-    const file = typeof ti.file_path === "string" ? ti.file_path : typeof ti.notebook_path === "string" ? ti.notebook_path : null;
-    if (!file) return;
-    const cwd = typeof input.cwd === "string" ? input.cwd : process.cwd();
-    const root = repoRootOf(cwd);
-    if (!root || !isSetUp(root)) return;
-    const rel = repoRelative(root, file, cwd);
-    if (!rel || excludeMatcher(loadConfig(root).exclude)(rel)) return;
-    const { ranges, lines } = rangesOf(input.tool_response, ti, input.tool_name);
-    appendEdit(root, {
-      file: rel,
-      ranges,
-      lines,
-      session: typeof input.session_id === "string" ? input.session_id : "",
-      ts: (/* @__PURE__ */ new Date()).toISOString()
-    });
-  } catch {
-  }
-}
-function onStop(input) {
-  try {
-    if (!isObj2(input)) return null;
-    const cwd = typeof input.cwd === "string" ? input.cwd : process.cwd();
-    const root = repoRootOf(cwd);
-    if (!root || !isSetUp(root)) return null;
-    const { handoff, exclude } = loadConfig(root);
-    if (!handoff.enabled) return null;
-    const isExcluded = excludeMatcher(exclude);
-    const edits = uncheckedEdits(root).filter((e) => !isExcluded(e.file));
-    const unchecked = edits.reduce((n, e) => n + e.lines, 0);
-    if (unchecked - getNudgedLines(root) < handoff.minLines) return null;
-    const cache = readZoneCache(root);
-    const zones = new Set(edits.map((e) => cache?.[e.file] ?? dirname2(e.file)));
-    setNudgedLines(root, unchecked);
-    return JSON.stringify({
-      systemMessage: `Agents changed ~${unchecked} lines in ${zones.size} zones since your last check. Run /understanding-map:handoff for a 60-second check.`
-    });
-  } catch {
-    return null;
-  }
-}
-
-// src/pipeline.ts
-import { homedir } from "node:os";
-
-// src/attribution.ts
-import { randomBytes } from "node:crypto";
-import { appendFileSync as appendFileSync2, mkdirSync as mkdirSync4, readdirSync as readdirSync2, readFileSync as readFileSync5, writeFileSync as writeFileSync4 } from "node:fs";
-import { join as join6, relative as relative2, sep } from "node:path";
-
-// src/jsonl-union.ts
-import { existsSync as existsSync2, readdirSync, readFileSync as readFileSync4 } from "node:fs";
-import { join as join5 } from "node:path";
-function countLines(text) {
-  const m = /* @__PURE__ */ new Map();
-  for (const line of text.split("\n")) if (line.trim()) m.set(line, (m.get(line) ?? 0) + 1);
-  return m;
-}
-function readJsonlUnion(root, dirRel, defaultRef) {
-  const counts = /* @__PURE__ */ new Map();
-  const merge = (name, text) => {
-    const cur = counts.get(name) ?? counts.set(name, /* @__PURE__ */ new Map()).get(name);
-    for (const [line, n] of countLines(text)) cur.set(line, Math.max(cur.get(line) ?? 0, n));
-  };
-  const dir = join5(root, dirRel);
-  if (existsSync2(dir)) {
-    for (const n of readdirSync(dir).filter((x) => x.endsWith(".jsonl")).sort()) {
-      try {
-        merge(n, readFileSync4(join5(dir, n), "utf8"));
-      } catch {
-      }
-    }
-  }
-  if (defaultRef) {
-    for (const p of listAtRef(root, defaultRef, dirRel)) {
-      if (!p.endsWith(".jsonl")) continue;
-      const t = showAtRef(root, defaultRef, p);
-      if (t !== null) merge(p.slice(p.lastIndexOf("/") + 1), t);
-    }
-  }
-  const out2 = /* @__PURE__ */ new Map();
-  for (const [name, lines] of counts) {
-    const arr = [];
-    for (const [line, n] of lines) for (let k = 0; k < n; k++) arr.push(line);
-    out2.set(name, arr);
-  }
-  return out2;
-}
-
-// src/attribution.ts
-function agentLinesByCommit(commits, edits, notedShas, opts = {}) {
-  const includeAll = opts.includeTrailersAndNotes ?? true;
-  const isMine = opts.isMine ?? (() => true);
-  const editsByFile = /* @__PURE__ */ new Map();
-  for (const e of edits) (editsByFile.get(e.file) ?? editsByFile.set(e.file, []).get(e.file)).push(e);
-  const result = /* @__PURE__ */ new Map();
-  commits.forEach((c, i) => {
-    const perFile = /* @__PURE__ */ new Map();
-    const wholeCommit = includeAll && (c.agentTrailer || notedShas.has(c.sha));
-    if (!wholeCommit && !isMine(c.email)) return;
-    for (const f of c.files) {
-      if (f.added <= 0) continue;
-      let lines = 0;
-      if (wholeCommit) {
-        lines = f.added;
-      } else {
-        const fileEdits = editsByFile.get(f.path);
-        if (!fileEdits) continue;
-        const prev = commits.slice(i + 1).find((p) => p.files.some((pf) => pf.path === f.path));
-        const lo = prev ? prev.date.getTime() : -Infinity;
-        const hi = c.date.getTime();
-        const sum2 = fileEdits.filter((e) => {
-          const t = Date.parse(e.ts);
-          return t > lo && t <= hi;
-        }).reduce((n, e) => n + e.lines, 0);
-        lines = Math.min(f.added, sum2);
-      }
-      if (lines > 0) perFile.set(f.path, (perFile.get(f.path) ?? 0) + lines);
-    }
-    if (perFile.size) result.set(c.sha, perFile);
-  });
-  return result;
-}
-var countLines2 = (s) => typeof s === "string" && s.length ? s.split("\n").length : 0;
-function editLines(name, input) {
-  if (name === "Edit") return countLines2(input.new_string);
-  if (name === "Write") return countLines2(input.content);
-  if (Array.isArray(input.edits)) {
-    return input.edits.reduce((n, e) => n + countLines2(e?.new_string), 0);
-  }
-  return 0;
-}
-function backfillSessionEdits(root, homeDir) {
-  const dir = join6(homeDir, ".claude", "projects", root.replace(/[^A-Za-z0-9-]/g, "-"));
-  let names;
-  try {
-    names = readdirSync2(dir).filter((n) => n.endsWith(".jsonl")).sort();
-  } catch {
-    return [];
-  }
-  const out2 = [];
-  for (const name of names) {
-    let text;
-    try {
-      text = readFileSync5(join6(dir, name), "utf8");
-    } catch {
-      continue;
-    }
-    for (const line of text.split("\n")) {
-      if (!line.trim()) continue;
-      try {
-        const rec = JSON.parse(line);
-        if (rec?.type !== "assistant" || typeof rec.timestamp !== "string" || !Array.isArray(rec.message?.content)) continue;
-        const session = typeof rec.sessionId === "string" ? rec.sessionId : name.replace(/\.jsonl$/, "");
-        for (const block of rec.message.content) {
-          if (block?.type !== "tool_use" || !["Edit", "Write", "MultiEdit"].includes(block.name)) continue;
-          const input = block.input ?? {};
-          const fp = input.file_path;
-          if (typeof fp !== "string") continue;
-          const rel = relative2(root, fp);
-          if (!rel || rel.startsWith("..") || rel.startsWith(sep) || /^[A-Za-z]:/.test(rel)) continue;
-          const lines = editLines(block.name, input);
-          if (lines <= 0) continue;
-          out2.push({ file: rel.split(sep).join("/"), ranges: [], lines, session, ts: rec.timestamp });
-        }
-      } catch {
-      }
-    }
-  }
-  return out2;
-}
-function isoWeek(d) {
-  const t = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));
-  const day = t.getUTCDay() || 7;
-  t.setUTCDate(t.getUTCDate() + 4 - day);
-  const yearStart = Date.UTC(t.getUTCFullYear(), 0, 1);
-  const week = Math.ceil(((t.getTime() - yearStart) / 864e5 + 1) / 7);
-  return `${t.getUTCFullYear()}-W${String(week).padStart(2, "0")}`;
-}
-var localDir2 = (root) => join6(umDir(root), "local");
-var shareDir = (root) => join6(umDir(root), "agent-share");
-function machineId(root) {
-  const path = join6(localDir2(root), "machine-id");
-  try {
-    const id2 = readFileSync5(path, "utf8").trim();
-    if (/^[0-9a-f]{8}$/.test(id2)) return id2;
-  } catch {
-  }
-  const id = randomBytes(4).toString("hex");
-  mkdirSync4(localDir2(root), { recursive: true });
-  writeFileSync4(path, id);
-  return id;
-}
-function syncAgentShare(root, zones, commits, agentLines) {
-  const zoneOf = zoneIndex(zones);
-  const totals = /* @__PURE__ */ new Map();
-  for (const c of commits) {
-    const perFile = agentLines.get(c.sha);
-    if (!perFile) continue;
-    const week = isoWeek(c.date);
-    for (const [path, n] of perFile) {
-      const zone = zoneOf.get(path);
-      if (!zone || n <= 0) continue;
-      const key = `${zone}|${week}`;
-      const cur = totals.get(key) ?? { zone, week, total: 0 };
-      cur.total += n;
-      totals.set(key, cur);
-    }
-  }
-  const writtenPath = join6(localDir2(root), "agent-share-written.json");
-  let written = {};
-  try {
-    const v = JSON.parse(readFileSync5(writtenPath, "utf8"));
-    if (typeof v === "object" && v !== null && !Array.isArray(v)) written = v;
-  } catch {
-  }
-  const lines = [];
-  for (const [key, { zone, week, total }] of totals) {
-    const delta = total - (written[key] ?? 0);
-    if (delta <= 0) continue;
-    const entry = { zone, agentLines: delta, week };
-    lines.push(JSON.stringify(entry));
-    written[key] = total;
-  }
-  if (!lines.length) return;
-  mkdirSync4(shareDir(root), { recursive: true });
-  appendFileSync2(join6(shareDir(root), `${machineId(root)}.jsonl`), lines.join("\n") + "\n");
-  mkdirSync4(localDir2(root), { recursive: true });
-  writeFileSync4(writtenPath, JSON.stringify(written));
-}
-function readAgentShares(root, defaultRef) {
-  const out2 = [];
-  for (const lines of readJsonlUnion(root, ".understanding/agent-share", defaultRef).values()) {
-    for (const line of lines) {
-      try {
-        const v = JSON.parse(line);
-        if (typeof v.zone !== "string" || typeof v.agentLines !== "number" || typeof v.week !== "string") continue;
-        out2.push(v);
-      } catch {
-      }
-    }
-  }
-  return out2;
-}
-
-// src/events.ts
-import { appendFileSync as appendFileSync3, mkdirSync as mkdirSync5, readFileSync as readFileSync6, writeFileSync as writeFileSync5 } from "node:fs";
-import { join as join7 } from "node:path";
-
-// src/identity.ts
-function sanitizeHandle(s) {
-  const h = s.toLowerCase().replace(/[^a-z0-9._-]/g, "-");
-  return h === "" || h === "." || h === ".." ? "unknown" : h;
-}
-function handleFor(email, config) {
-  const override = Object.hasOwn(config.handles, email) ? config.handles[email] : "";
-  return sanitizeHandle(override || email.split("@")[0]);
-}
-
-// src/events.ts
-var eventsRel = ".understanding/events";
-var localDir3 = (root) => join7(umDir(root), "local");
-function appendJsonl(dir, file, value) {
-  mkdirSync5(dir, { recursive: true });
-  appendFileSync3(join7(dir, file), JSON.stringify(value) + "\n");
-}
-function appendPass(root, handle, ev) {
-  appendJsonl(join7(root, eventsRel), `${sanitizeHandle(handle)}.jsonl`, ev);
-}
-function readPasses(root, defaultRef) {
-  const out2 = /* @__PURE__ */ new Map();
-  for (const [name, lines] of readJsonlUnion(root, eventsRel, defaultRef)) {
-    const evs = [];
-    for (const line of lines) {
-      try {
-        evs.push(JSON.parse(line));
-      } catch {
-      }
-    }
-    out2.set(name.replace(/\.jsonl$/, ""), evs);
-  }
-  return out2;
-}
-function appendLocalPartial(root, ev) {
-  appendJsonl(localDir3(root), "partials.jsonl", ev);
-}
-function readLocalPartials(root) {
-  let text;
-  try {
-    text = readFileSync6(join7(localDir3(root), "partials.jsonl"), "utf8");
-  } catch {
-    return [];
-  }
-  const out2 = [];
-  for (const line of text.split("\n")) {
-    if (!line.trim()) continue;
-    try {
-      out2.push(JSON.parse(line));
-    } catch {
-    }
-  }
-  return out2;
-}
-function appendAttempt(root, a) {
-  appendJsonl(localDir3(root), "attempts.jsonl", a);
-}
-function readFlags(root) {
-  try {
-    const v = JSON.parse(readFileSync6(join7(localDir3(root), "flags.json"), "utf8"));
-    if (typeof v === "object" && v !== null && !Array.isArray(v)) return v;
-  } catch {
-  }
-  return {};
-}
-function writeFlags(root, flags) {
-  mkdirSync5(localDir3(root), { recursive: true });
-  writeFileSync5(join7(localDir3(root), "flags.json"), JSON.stringify(flags, null, 2) + "\n");
-}
-function addFlag(root, zone, flag) {
-  const flags = readFlags(root);
-  const cur = Array.isArray(flags[zone]) ? flags[zone] : [];
-  if (cur.includes(flag)) return;
-  flags[zone] = [...cur, flag];
-  writeFlags(root, flags);
-}
-function removeFlag(root, zone, flag) {
-  const flags = readFlags(root);
-  const cur = Object.hasOwn(flags, zone) && Array.isArray(flags[zone]) ? flags[zone] : [];
-  if (!cur.includes(flag)) return;
-  const rest = cur.filter((f) => f !== flag);
-  if (rest.length) flags[zone] = rest;
-  else delete flags[zone];
-  writeFlags(root, flags);
-}
-
-// src/reviews.ts
-import { execFileSync as execFileSync2 } from "node:child_process";
-import { mkdirSync as mkdirSync6, readFileSync as readFileSync7, writeFileSync as writeFileSync6 } from "node:fs";
-import { dirname as dirname3, join as join8 } from "node:path";
-var BUDGET_MS = 2e4;
-var CACHE_MS = 24 * 36e5;
-var MIN_COMMENT_CHARS = 20;
-var ghIn = (root, args, timeout) => execFileSync2("gh", args, { cwd: root, timeout, encoding: "utf8", maxBuffer: 64 * 1024 * 1024, stdio: ["ignore", "pipe", "ignore"] });
-function ghAvailable(root) {
-  try {
-    ghIn(root, ["auth", "status"], 5e3);
-    return true;
-  } catch {
-    return false;
-  }
-}
-var cachePath2 = (root) => join8(umDir(root), "local", "reviews-cache.json");
-function readReviewCache(root) {
-  try {
-    const v = JSON.parse(readFileSync7(cachePath2(root), "utf8"));
-    const at = typeof v.fetchedAt === "string" ? Date.parse(v.fetchedAt) : NaN;
-    if (Number.isNaN(at) || Date.now() - at >= CACHE_MS || typeof v.counts !== "object" || v.counts === null) return null;
-    return v.counts;
-  } catch {
-    return null;
-  }
-}
-function cachedReviews(root, config) {
-  return config.githubReviews ? readReviewCache(root) ?? {} : {};
-}
-function writeCache(root, counts) {
-  try {
-    mkdirSync6(dirname3(cachePath2(root)), { recursive: true });
-    writeFileSync6(cachePath2(root), JSON.stringify({ fetchedAt: new Date(Date.now()).toISOString(), counts }));
-  } catch {
-  }
-}
-function reviewCountsByPath(root, run = (args, t) => ghIn(root, args, t)) {
-  const cached = readReviewCache(root);
-  if (cached) return cached;
-  const started = Date.now();
-  const call = (args) => {
-    const left = BUDGET_MS - (Date.now() - started);
-    if (left <= 0) throw new Error("review budget exceeded");
-    return run(args, Math.max(1, left));
-  };
-  try {
-    const repo = call(["repo", "view", "--json", "nameWithOwner", "-q", ".nameWithOwner"]).trim();
-    const prs = JSON.parse(call(["api", `repos/${repo}/pulls?state=closed&per_page=50`, "--jq", "[.[] | {number, merged_at}]"]));
-    const counts = {};
-    for (const pr of prs.filter((p) => p.merged_at)) {
-      const comments = JSON.parse(call(["api", `repos/${repo}/pulls/${pr.number}/comments?per_page=100`]));
-      for (const c of comments) {
-        const login = c.user?.login;
-        if (!c.path || !login || (c.body ?? "").trim().length < MIN_COMMENT_CHARS) continue;
-        counts[c.path] ??= {};
-        counts[c.path][login] = (counts[c.path][login] ?? 0) + 1;
-      }
-    }
-    if (Date.now() - started > BUDGET_MS) return {};
-    writeCache(root, counts);
-    return counts;
-  } catch {
-    return {};
-  }
-}
-
 // src/imports.ts
-import { readFileSync as readFileSync8 } from "node:fs";
-import { join as join9, posix } from "node:path";
 var EXT_LANG = {
   ts: "ts",
   tsx: "ts",
@@ -2756,7 +2089,7 @@ var PATTERNS = {
   ]
 };
 function importMatches(lang, source) {
-  const all = (re, text, offset = 0) => [...text.matchAll(re)].map((m) => ({ spec: m[1], index: offset + m.index }));
+  const all = (re, text3, offset = 0) => [...text3.matchAll(re)].map((m) => ({ spec: m[1], index: offset + m.index }));
   if (lang === "go") {
     const single = all(PATTERNS.go[0], source);
     const grouped = [...source.matchAll(/\bimport\s*\(([\s\S]*?)\)/g)].flatMap((b) => {
@@ -2908,7 +2241,7 @@ function resolveImport(from, spec, lang, files, goModules = /* @__PURE__ */ new 
 var MIN_COCHANGE_COMMITS = 3;
 function readSource(root, path) {
   try {
-    return readFileSync8(join9(root, path), "utf8");
+    return readFileSync3(join3(root, path), "utf8");
   } catch {
     return null;
   }
@@ -2942,19 +2275,22 @@ function scanEdges(root, known, from = known) {
     for (const { spec, index: index2 } of importMatches(lang, src)) {
       const target = resolveImport(path, spec, lang, known, goModules);
       if (!target) continue;
-      const line = lineAt(src, index2);
+      const line2 = lineAt(src, index2);
       const targets = known.has(target) ? [target] : [...filesByDir.get(target) ?? []];
       for (const t of targets) {
-        const key = `${path}\0${line}\0${t}`;
+        const key = `${path}\0${line2}\0${t}`;
         if (t === path || seen.has(key)) continue;
         seen.add(key);
-        edges.push({ fromFile: path, line, toFile: t });
+        edges.push({ fromFile: path, line: line2, toFile: t });
       }
     }
   }
   return edges.sort((a, b) => cmp(a.fromFile, b.fromFile) || a.line - b.line || cmp(a.toFile, b.toFile));
 }
 var cmp = (a, b) => a < b ? -1 : a > b ? 1 : 0;
+function importEdges(root, files) {
+  return scanEdges(root, new Set(files.map((f) => typeof f === "string" ? f : f.path)));
+}
 function fanInByZone(root, files, zones, commits) {
   const known = new Set(files.map((f) => f.path));
   const zoneOf = zoneIndex(zones);
@@ -2984,6 +2320,568 @@ function fanInByZone(root, files, zones, commits) {
     result[z.id] = [...counts.values()].filter((n) => n >= MIN_COCHANGE_COMMITS).length;
   }
   return result;
+}
+
+// src/pipeline.ts
+import { homedir } from "node:os";
+
+// src/attribution.ts
+import { randomBytes } from "node:crypto";
+import { appendFileSync, mkdirSync as mkdirSync3, readdirSync as readdirSync2, readFileSync as readFileSync5, writeFileSync as writeFileSync3 } from "node:fs";
+import { join as join5, relative, sep } from "node:path";
+
+// src/jsonl-union.ts
+import { existsSync as existsSync2, readdirSync, readFileSync as readFileSync4 } from "node:fs";
+import { join as join4 } from "node:path";
+
+// src/git.ts
+import { execFileSync } from "node:child_process";
+var GitError = class extends Error {
+  constructor(message, status, stderr) {
+    super(message);
+    this.status = status;
+    this.stderr = stderr;
+    this.name = "GitError";
+  }
+};
+function git(root, args) {
+  try {
+    return execFileSync("git", args, {
+      cwd: root,
+      encoding: "utf8",
+      env: { ...process.env, LC_ALL: "C" },
+      maxBuffer: 512 * 1024 * 1024,
+      stdio: ["ignore", "pipe", "pipe"]
+    });
+  } catch (e) {
+    const err2 = e;
+    const stderr = String(err2.stderr ?? "");
+    throw new GitError(`git ${args.join(" ")} failed: ${stderr.trim() || err2.message}`, err2.status ?? null, stderr);
+  }
+}
+function repoRootOf(cwd) {
+  try {
+    return git(cwd, ["rev-parse", "--show-toplevel"]).trim() || null;
+  } catch {
+    return null;
+  }
+}
+function listTrackedFiles(root) {
+  return git(root, ["ls-files", "-z"]).split("\0").filter(Boolean);
+}
+var AGENT_RE = /^co-authored-by:.*\b(claude|anthropic|copilot|cursor|codex|devin|aider|gemini|openai|windsurf|cline|jules)\b/im;
+function isAgentTrailer(message) {
+  return AGENT_RE.test(message);
+}
+function parseNumstat(body) {
+  const tokens = body.replace(/^[\n\0]+/, "").split("\0");
+  const files = [];
+  for (let i = 0; i < tokens.length; i++) {
+    const tok = tokens[i].replace(/^\n+/, "");
+    if (!tok) continue;
+    const m = /^(\d+|-)\t(\d+|-)\t(.*)$/s.exec(tok);
+    if (!m) continue;
+    let path = m[3];
+    if (path === "") {
+      path = tokens[i + 2] ?? "";
+      i += 2;
+    }
+    files.push({
+      path,
+      added: m[1] === "-" ? 0 : Number(m[1]),
+      deleted: m[2] === "-" ? 0 : Number(m[2])
+    });
+  }
+  return files;
+}
+function readHistory(root, sinceDays, now = /* @__PURE__ */ new Date()) {
+  const since = new Date(now.getTime() - sinceDays * 864e5).toISOString();
+  try {
+    git(root, ["rev-parse", "--verify", "-q", "HEAD"]);
+  } catch {
+    return [];
+  }
+  const out2 = git(root, [
+    "log",
+    "--no-merges",
+    "-M",
+    "-z",
+    "--numstat",
+    `--since=${since}`,
+    "--format=%x1e%H%x1f%ae%x1f%aI%x1f%B%x1f"
+  ]);
+  const commits = [];
+  for (const rec of out2.split("")) {
+    if (!rec.trim()) continue;
+    const [sha, email, date, message, body = ""] = rec.split("");
+    commits.push({
+      sha,
+      email,
+      date: new Date(date),
+      message,
+      agentTrailer: isAgentTrailer(message),
+      files: parseNumstat(body)
+    });
+  }
+  return commits;
+}
+function currentEmail(root) {
+  try {
+    return git(root, ["config", "user.email"]).trim();
+  } catch {
+    return "";
+  }
+}
+function defaultBranchRef(root) {
+  try {
+    const ref2 = git(root, ["symbolic-ref", "--short", "refs/remotes/origin/HEAD"]).trim();
+    if (ref2) return ref2;
+  } catch {
+  }
+  for (const ref2 of ["origin/main", "origin/master"]) {
+    try {
+      git(root, ["rev-parse", "--verify", "--quiet", `refs/remotes/${ref2}`]);
+      return ref2;
+    } catch {
+    }
+  }
+  return null;
+}
+function showAtRef(root, ref2, path) {
+  try {
+    return git(root, ["show", `${ref2}:${path}`]);
+  } catch {
+    return null;
+  }
+}
+function listAtRef(root, ref2, dir) {
+  const d = dir.replace(/^\.\//, "").replace(/\/+$/, "");
+  try {
+    const args = ["ls-tree", "-r", "--name-only", "-z", ref2];
+    if (d) args.push("--", `${d}/`);
+    return git(root, args).split("\0").filter(Boolean);
+  } catch {
+    return [];
+  }
+}
+function commitsWithNotes(root, notesRef) {
+  try {
+    const out2 = git(root, ["notes", `--ref=${notesRef}`, "list"]);
+    const set = /* @__PURE__ */ new Set();
+    for (const line2 of out2.split("\n")) {
+      const parts = line2.trim().split(/\s+/);
+      if (parts[1]) set.add(parts[1]);
+    }
+    return set;
+  } catch {
+    return /* @__PURE__ */ new Set();
+  }
+}
+
+// src/jsonl-union.ts
+function countLines(text3) {
+  const m = /* @__PURE__ */ new Map();
+  for (const line2 of text3.split("\n")) if (line2.trim()) m.set(line2, (m.get(line2) ?? 0) + 1);
+  return m;
+}
+function readJsonlUnion(root, dirRel, defaultRef) {
+  const counts = /* @__PURE__ */ new Map();
+  const merge = (name, text3) => {
+    const cur = counts.get(name) ?? counts.set(name, /* @__PURE__ */ new Map()).get(name);
+    for (const [line2, n] of countLines(text3)) cur.set(line2, Math.max(cur.get(line2) ?? 0, n));
+  };
+  const dir = join4(root, dirRel);
+  if (existsSync2(dir)) {
+    for (const n of readdirSync(dir).filter((x) => x.endsWith(".jsonl")).sort()) {
+      try {
+        merge(n, readFileSync4(join4(dir, n), "utf8"));
+      } catch {
+      }
+    }
+  }
+  if (defaultRef) {
+    for (const p of listAtRef(root, defaultRef, dirRel)) {
+      if (!p.endsWith(".jsonl")) continue;
+      const t = showAtRef(root, defaultRef, p);
+      if (t !== null) merge(p.slice(p.lastIndexOf("/") + 1), t);
+    }
+  }
+  const out2 = /* @__PURE__ */ new Map();
+  for (const [name, lines] of counts) {
+    const arr = [];
+    for (const [line2, n] of lines) for (let k = 0; k < n; k++) arr.push(line2);
+    out2.set(name, arr);
+  }
+  return out2;
+}
+
+// src/attribution.ts
+function agentLinesByCommit(commits, edits, notedShas, opts = {}) {
+  const includeAll = opts.includeTrailersAndNotes ?? true;
+  const isMine = opts.isMine ?? (() => true);
+  const editsByFile = /* @__PURE__ */ new Map();
+  for (const e of edits) (editsByFile.get(e.file) ?? editsByFile.set(e.file, []).get(e.file)).push(e);
+  const result = /* @__PURE__ */ new Map();
+  commits.forEach((c, i) => {
+    const perFile = /* @__PURE__ */ new Map();
+    const wholeCommit = includeAll && (c.agentTrailer || notedShas.has(c.sha));
+    if (!wholeCommit && !isMine(c.email)) return;
+    for (const f of c.files) {
+      if (f.added <= 0) continue;
+      let lines = 0;
+      if (wholeCommit) {
+        lines = f.added;
+      } else {
+        const fileEdits = editsByFile.get(f.path);
+        if (!fileEdits) continue;
+        const prev = commits.slice(i + 1).find((p) => p.files.some((pf) => pf.path === f.path));
+        const lo = prev ? prev.date.getTime() : -Infinity;
+        const hi = c.date.getTime();
+        const sum2 = fileEdits.filter((e) => {
+          const t = Date.parse(e.ts);
+          return t > lo && t <= hi;
+        }).reduce((n, e) => n + e.lines, 0);
+        lines = Math.min(f.added, sum2);
+      }
+      if (lines > 0) perFile.set(f.path, (perFile.get(f.path) ?? 0) + lines);
+    }
+    if (perFile.size) result.set(c.sha, perFile);
+  });
+  return result;
+}
+var countLines2 = (s) => typeof s === "string" && s.length ? s.split("\n").length : 0;
+function editLines(name, input) {
+  if (name === "Edit") return countLines2(input.new_string);
+  if (name === "Write") return countLines2(input.content);
+  if (Array.isArray(input.edits)) {
+    return input.edits.reduce((n, e) => n + countLines2(e?.new_string), 0);
+  }
+  return 0;
+}
+function backfillSessionEdits(root, homeDir) {
+  const dir = join5(homeDir, ".claude", "projects", root.replace(/[^A-Za-z0-9-]/g, "-"));
+  let names;
+  try {
+    names = readdirSync2(dir).filter((n) => n.endsWith(".jsonl")).sort();
+  } catch {
+    return [];
+  }
+  const out2 = [];
+  for (const name of names) {
+    let text3;
+    try {
+      text3 = readFileSync5(join5(dir, name), "utf8");
+    } catch {
+      continue;
+    }
+    for (const line2 of text3.split("\n")) {
+      if (!line2.trim()) continue;
+      try {
+        const rec = JSON.parse(line2);
+        if (rec?.type !== "assistant" || typeof rec.timestamp !== "string" || !Array.isArray(rec.message?.content)) continue;
+        const session = typeof rec.sessionId === "string" ? rec.sessionId : name.replace(/\.jsonl$/, "");
+        for (const block2 of rec.message.content) {
+          if (block2?.type !== "tool_use" || !["Edit", "Write", "MultiEdit"].includes(block2.name)) continue;
+          const input = block2.input ?? {};
+          const fp = input.file_path;
+          if (typeof fp !== "string") continue;
+          const rel = relative(root, fp);
+          if (!rel || rel.startsWith("..") || rel.startsWith(sep) || /^[A-Za-z]:/.test(rel)) continue;
+          const lines = editLines(block2.name, input);
+          if (lines <= 0) continue;
+          out2.push({ file: rel.split(sep).join("/"), ranges: [], lines, session, ts: rec.timestamp });
+        }
+      } catch {
+      }
+    }
+  }
+  return out2;
+}
+function isoWeek(d) {
+  const t = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));
+  const day = t.getUTCDay() || 7;
+  t.setUTCDate(t.getUTCDate() + 4 - day);
+  const yearStart = Date.UTC(t.getUTCFullYear(), 0, 1);
+  const week = Math.ceil(((t.getTime() - yearStart) / 864e5 + 1) / 7);
+  return `${t.getUTCFullYear()}-W${String(week).padStart(2, "0")}`;
+}
+var localDir = (root) => join5(umDir(root), "local");
+var shareDir = (root) => join5(umDir(root), "agent-share");
+function machineId(root) {
+  const path = join5(localDir(root), "machine-id");
+  try {
+    const id2 = readFileSync5(path, "utf8").trim();
+    if (/^[0-9a-f]{8}$/.test(id2)) return id2;
+  } catch {
+  }
+  const id = randomBytes(4).toString("hex");
+  mkdirSync3(localDir(root), { recursive: true });
+  writeFileSync3(path, id);
+  return id;
+}
+function syncAgentShare(root, zones, commits, agentLines) {
+  const zoneOf = zoneIndex(zones);
+  const totals = /* @__PURE__ */ new Map();
+  for (const c of commits) {
+    const perFile = agentLines.get(c.sha);
+    if (!perFile) continue;
+    const week = isoWeek(c.date);
+    for (const [path, n] of perFile) {
+      const zone = zoneOf.get(path);
+      if (!zone || n <= 0) continue;
+      const key = `${zone}|${week}`;
+      const cur = totals.get(key) ?? { zone, week, total: 0 };
+      cur.total += n;
+      totals.set(key, cur);
+    }
+  }
+  const writtenPath = join5(localDir(root), "agent-share-written.json");
+  let written = {};
+  try {
+    const v = JSON.parse(readFileSync5(writtenPath, "utf8"));
+    if (typeof v === "object" && v !== null && !Array.isArray(v)) written = v;
+  } catch {
+  }
+  const lines = [];
+  for (const [key, { zone, week, total }] of totals) {
+    const delta = total - (written[key] ?? 0);
+    if (delta <= 0) continue;
+    const entry = { zone, agentLines: delta, week };
+    lines.push(JSON.stringify(entry));
+    written[key] = total;
+  }
+  if (!lines.length) return;
+  mkdirSync3(shareDir(root), { recursive: true });
+  appendFileSync(join5(shareDir(root), `${machineId(root)}.jsonl`), lines.join("\n") + "\n");
+  mkdirSync3(localDir(root), { recursive: true });
+  writeFileSync3(writtenPath, JSON.stringify(written));
+}
+function readAgentShares(root, defaultRef) {
+  const out2 = [];
+  for (const lines of readJsonlUnion(root, ".understanding/agent-share", defaultRef).values()) {
+    for (const line2 of lines) {
+      try {
+        const v = JSON.parse(line2);
+        if (typeof v.zone !== "string" || typeof v.agentLines !== "number" || typeof v.week !== "string") continue;
+        out2.push(v);
+      } catch {
+      }
+    }
+  }
+  return out2;
+}
+
+// src/editlog.ts
+import { appendFileSync as appendFileSync2, mkdirSync as mkdirSync4, readFileSync as readFileSync6, writeFileSync as writeFileSync4 } from "node:fs";
+import { join as join6 } from "node:path";
+var localDir2 = (root) => join6(umDir(root), "local");
+var editsPath = (root) => join6(localDir2(root), "edits.jsonl");
+var handoffPath = (root) => join6(localDir2(root), "handoff.json");
+function appendEdit(root, e) {
+  mkdirSync4(localDir2(root), { recursive: true });
+  appendFileSync2(editsPath(root), JSON.stringify(e) + "\n");
+}
+function readEdits(root) {
+  let text3;
+  try {
+    text3 = readFileSync6(editsPath(root), "utf8");
+  } catch {
+    return [];
+  }
+  const out2 = [];
+  for (const line2 of text3.split("\n")) {
+    if (!line2.trim()) continue;
+    try {
+      out2.push(JSON.parse(line2));
+    } catch {
+    }
+  }
+  return out2;
+}
+function readHandoff(root) {
+  try {
+    const v = JSON.parse(readFileSync6(handoffPath(root), "utf8"));
+    return {
+      checkedUpTo: typeof v.checkedUpTo === "string" ? v.checkedUpTo : "",
+      nudgedLines: typeof v.nudgedLines === "number" ? v.nudgedLines : 0
+    };
+  } catch {
+    return { checkedUpTo: "", nudgedLines: 0 };
+  }
+}
+function writeHandoff(root, h) {
+  mkdirSync4(localDir2(root), { recursive: true });
+  writeFileSync4(handoffPath(root), JSON.stringify(h));
+}
+function uncheckedEdits(root) {
+  const { checkedUpTo } = readHandoff(root);
+  return readEdits(root).filter((e) => e.ts > checkedUpTo);
+}
+function markChecked(root, upToTs) {
+  writeHandoff(root, { checkedUpTo: upToTs, nudgedLines: 0 });
+}
+function getNudgedLines(root) {
+  return readHandoff(root).nudgedLines;
+}
+function setNudgedLines(root, n) {
+  writeHandoff(root, { ...readHandoff(root), nudgedLines: n });
+}
+
+// src/events.ts
+import { appendFileSync as appendFileSync3, mkdirSync as mkdirSync5, readFileSync as readFileSync7, writeFileSync as writeFileSync5 } from "node:fs";
+import { join as join7 } from "node:path";
+
+// src/identity.ts
+function sanitizeHandle(s) {
+  const h = s.toLowerCase().replace(/[^a-z0-9._-]/g, "-");
+  return h === "" || h === "." || h === ".." ? "unknown" : h;
+}
+function handleFor(email, config) {
+  const override = Object.hasOwn(config.handles, email) ? config.handles[email] : "";
+  return sanitizeHandle(override || email.split("@")[0]);
+}
+
+// src/events.ts
+var eventsRel = ".understanding/events";
+var localDir3 = (root) => join7(umDir(root), "local");
+function appendJsonl(dir, file, value) {
+  mkdirSync5(dir, { recursive: true });
+  appendFileSync3(join7(dir, file), JSON.stringify(value) + "\n");
+}
+function appendPass(root, handle, ev) {
+  appendJsonl(join7(root, eventsRel), `${sanitizeHandle(handle)}.jsonl`, ev);
+}
+function readPasses(root, defaultRef) {
+  const out2 = /* @__PURE__ */ new Map();
+  for (const [name, lines] of readJsonlUnion(root, eventsRel, defaultRef)) {
+    const evs = [];
+    for (const line2 of lines) {
+      try {
+        evs.push(JSON.parse(line2));
+      } catch {
+      }
+    }
+    out2.set(name.replace(/\.jsonl$/, ""), evs);
+  }
+  return out2;
+}
+function appendLocalPartial(root, ev) {
+  appendJsonl(localDir3(root), "partials.jsonl", ev);
+}
+function readLocalPartials(root) {
+  let text3;
+  try {
+    text3 = readFileSync7(join7(localDir3(root), "partials.jsonl"), "utf8");
+  } catch {
+    return [];
+  }
+  const out2 = [];
+  for (const line2 of text3.split("\n")) {
+    if (!line2.trim()) continue;
+    try {
+      out2.push(JSON.parse(line2));
+    } catch {
+    }
+  }
+  return out2;
+}
+function appendAttempt(root, a) {
+  appendJsonl(localDir3(root), "attempts.jsonl", a);
+}
+function readFlags(root) {
+  try {
+    const v = JSON.parse(readFileSync7(join7(localDir3(root), "flags.json"), "utf8"));
+    if (typeof v === "object" && v !== null && !Array.isArray(v)) return v;
+  } catch {
+  }
+  return {};
+}
+function writeFlags(root, flags) {
+  mkdirSync5(localDir3(root), { recursive: true });
+  writeFileSync5(join7(localDir3(root), "flags.json"), JSON.stringify(flags, null, 2) + "\n");
+}
+function addFlag(root, zone, flag) {
+  const flags = readFlags(root);
+  const cur = Array.isArray(flags[zone]) ? flags[zone] : [];
+  if (cur.includes(flag)) return;
+  flags[zone] = [...cur, flag];
+  writeFlags(root, flags);
+}
+function removeFlag(root, zone, flag) {
+  const flags = readFlags(root);
+  const cur = Object.hasOwn(flags, zone) && Array.isArray(flags[zone]) ? flags[zone] : [];
+  if (!cur.includes(flag)) return;
+  const rest = cur.filter((f) => f !== flag);
+  if (rest.length) flags[zone] = rest;
+  else delete flags[zone];
+  writeFlags(root, flags);
+}
+
+// src/reviews.ts
+import { execFileSync as execFileSync2 } from "node:child_process";
+import { mkdirSync as mkdirSync6, readFileSync as readFileSync8, writeFileSync as writeFileSync6 } from "node:fs";
+import { dirname as dirname2, join as join8 } from "node:path";
+var BUDGET_MS = 2e4;
+var CACHE_MS = 24 * 36e5;
+var MIN_COMMENT_CHARS = 20;
+var ghIn = (root, args, timeout) => execFileSync2("gh", args, { cwd: root, timeout, encoding: "utf8", maxBuffer: 64 * 1024 * 1024, stdio: ["ignore", "pipe", "ignore"] });
+function ghAvailable(root) {
+  try {
+    ghIn(root, ["auth", "status"], 5e3);
+    return true;
+  } catch {
+    return false;
+  }
+}
+var cachePath2 = (root) => join8(umDir(root), "local", "reviews-cache.json");
+function readReviewCache(root) {
+  try {
+    const v = JSON.parse(readFileSync8(cachePath2(root), "utf8"));
+    const at = typeof v.fetchedAt === "string" ? Date.parse(v.fetchedAt) : NaN;
+    if (Number.isNaN(at) || Date.now() - at >= CACHE_MS || typeof v.counts !== "object" || v.counts === null) return null;
+    return v.counts;
+  } catch {
+    return null;
+  }
+}
+function cachedReviews(root, config) {
+  return config.githubReviews ? readReviewCache(root) ?? {} : {};
+}
+function writeCache(root, counts) {
+  try {
+    mkdirSync6(dirname2(cachePath2(root)), { recursive: true });
+    writeFileSync6(cachePath2(root), JSON.stringify({ fetchedAt: new Date(Date.now()).toISOString(), counts }));
+  } catch {
+  }
+}
+function reviewCountsByPath(root, run = (args, t) => ghIn(root, args, t)) {
+  const cached = readReviewCache(root);
+  if (cached) return cached;
+  const started = Date.now();
+  const call = (args) => {
+    const left = BUDGET_MS - (Date.now() - started);
+    if (left <= 0) throw new Error("review budget exceeded");
+    return run(args, Math.max(1, left));
+  };
+  try {
+    const repo = call(["repo", "view", "--json", "nameWithOwner", "-q", ".nameWithOwner"]).trim();
+    const prs = JSON.parse(call(["api", `repos/${repo}/pulls?state=closed&per_page=50`, "--jq", "[.[] | {number, merged_at}]"]));
+    const counts = {};
+    for (const pr of prs.filter((p) => p.merged_at)) {
+      const comments = JSON.parse(call(["api", `repos/${repo}/pulls/${pr.number}/comments?per_page=100`]));
+      for (const c of comments) {
+        const login = c.user?.login;
+        if (!c.path || !login || (c.body ?? "").trim().length < MIN_COMMENT_CHARS) continue;
+        counts[c.path] ??= {};
+        counts[c.path][login] = (counts[c.path][login] ?? 0) + 1;
+      }
+    }
+    if (Date.now() - started > BUDGET_MS) return {};
+    writeCache(root, counts);
+    return counts;
+  } catch {
+    return {};
+  }
 }
 
 // src/scoring.ts
@@ -3299,9 +3197,384 @@ function buildMap(root, opts = {}) {
   });
 }
 
+// src/record.ts
+import { mkdirSync as mkdirSync7, readFileSync as readFileSync9, writeFileSync as writeFileSync7 } from "node:fs";
+import { dirname as dirname3, join as join9 } from "node:path";
+var SCORE = { pass: 1, partial: 0.5, miss: 0 };
+var DAY2 = 864e5;
+function gradeSession(grades) {
+  if (grades.length === 0) return "miss";
+  const avg = grades.reduce((s, g2) => s + SCORE[g2], 0) / grades.length;
+  if (avg >= 0.67 && !grades.includes("miss")) return "pass";
+  return avg >= 0.34 ? "partial" : "miss";
+}
+function handoffSet(root) {
+  const isExcluded = excludeMatcher(loadConfig(root).exclude);
+  const edits = uncheckedEdits(root).filter((e) => !isExcluded(e.file));
+  const cache = readZoneCache(root) ?? {};
+  const by = /* @__PURE__ */ new Map();
+  for (const e of edits) {
+    const dir = dirname3(e.file);
+    const id = cache[e.file] ?? (dir === "." ? "(root)" : dir);
+    const z = by.get(id) ?? { zone: id, lines: 0, files: [] };
+    z.lines += e.lines;
+    if (!z.files.includes(e.file)) z.files.push(e.file);
+    by.set(id, z);
+  }
+  return {
+    totalLines: edits.reduce((s, e) => s + e.lines, 0),
+    zones: [...by.values()].sort((a, b) => b.lines - a.lines),
+    edits
+  };
+}
+var lastLearnPath = (root) => join9(umDir(root), "local", "last-learn.json");
+function readLastLearn(root) {
+  try {
+    const v = JSON.parse(readFileSync9(lastLearnPath(root), "utf8"));
+    return typeof v.zone === "string" && typeof v.date === "string" ? { zone: v.zone, date: v.date } : null;
+  } catch {
+    return null;
+  }
+}
+function writeLastLearn(root, zone, date) {
+  mkdirSync7(dirname3(lastLearnPath(root)), { recursive: true });
+  writeFileSync7(lastLearnPath(root), JSON.stringify({ zone, date }));
+}
+function clearHandoff(root, edits) {
+  if (edits.length) markChecked(root, edits.reduce((m, e) => e.ts > m ? e.ts : m, ""));
+}
+function recordResult(root, r) {
+  const now = r.now ?? /* @__PURE__ */ new Date();
+  const date = now.toISOString();
+  const opts = { now, homeDir: r.homeDir };
+  const result = gradeSession(r.grades);
+  const handoff = r.kind === "handoff" ? handoffSet(root) : null;
+  const zoneIds = handoff ? handoff.zones.map((z) => z.zone) : r.zones;
+  const before = buildMap(root, opts);
+  const levelOf = (m, id) => m.zones.find((z) => z.zone.id === id)?.people.find((p) => p.handle === m.me)?.level ?? 0;
+  const live = zoneIds.filter((id) => before.zones.some((z) => z.zone.id === id));
+  if (handoff) {
+    if (result === "pass") {
+      for (const id of live) {
+        const z = before.zones.find((x) => x.zone.id === id);
+        appendPass(root, before.me, { zone: id, level: Math.max(levelOf(before, id), HANDOFF_PASS_LEVEL), fingerprint: z.zone.fingerprint, date, kind: "handoff" });
+      }
+      for (const id of zoneIds) removeFlag(root, id, "unreviewed-agent-code");
+    } else if (result === "miss") {
+      for (const id of zoneIds) addFlag(root, id, "unreviewed-agent-code");
+    }
+    clearHandoff(root, handoff.edits);
+  } else {
+    for (const id of live) {
+      const z = before.zones.find((x) => x.zone.id === id);
+      const current = levelOf(before, id);
+      if (result === "pass") {
+        appendPass(root, before.me, { zone: id, level: Math.max(current, SESSION_PASS_LEVEL), fingerprint: z.zone.fingerprint, date, kind: "session" });
+        removeFlag(root, id, "hard-to-verify");
+        removeFlag(root, id, "unreviewed-agent-code");
+      } else if (result === "partial") {
+        appendLocalPartial(root, { zone: id, level: Math.max(current, PARTIAL_LEVEL), fingerprint: z.zone.fingerprint, date, kind: "session" });
+        appendAttempt(root, { zone: id, kind: "session", result: "partial", date });
+      } else {
+        appendAttempt(root, { zone: id, kind: "session", result: "miss", date, retryAfter: new Date(now.getTime() + 3 * DAY2).toISOString() });
+      }
+    }
+  }
+  if (!handoff && r.zones[0]) {
+    try {
+      writeLastLearn(root, r.zones[0], date);
+    } catch {
+    }
+  }
+  const after = buildMap(root, opts);
+  const changes = live.map((id) => ({
+    zone: id,
+    before: before.zones.find((z) => z.zone.id === id).state,
+    after: after.zones.find((z) => z.zone.id === id)?.state ?? "unknown",
+    levelBefore: levelOf(before, id),
+    levelAfter: levelOf(after, id)
+  }));
+  return { result, changes };
+}
+function skipHandoff(root, _now = /* @__PURE__ */ new Date()) {
+  const set = handoffSet(root);
+  for (const z of set.zones) addFlag(root, z.zone, "unreviewed-agent-code");
+  clearHandoff(root, set.edits);
+}
+function markUnverifiable(root, zone) {
+  addFlag(root, zone, "hard-to-verify");
+}
+
+// src/context.ts
+var MAX_NEIGHBOURS = 8;
+var MAX_FILES = 5;
+var MAX_IMPORTS = 10;
+var MAX_HINTS = 8;
+var HINT_DEPTH = 4;
+var MAX_LINE = 200;
+function targetPath(root, target, cwd = process.cwd()) {
+  let base = cwd;
+  try {
+    base = realpathSync(base);
+  } catch {
+  }
+  const rel = relative2(root, resolve(base, target)).split("\\").join("/");
+  return rel === "" ? target : rel.replace(/^\.\//, "");
+}
+function resolveTarget(m, root, target, cwd) {
+  const byId = m.zones.find((z) => z.zone.id === target);
+  if (byId) return { zone: byId, note: "" };
+  const path = targetPath(root, target, cwd);
+  const file = m.zones.find((z) => z.zone.files.includes(path));
+  if (file) return { zone: file, note: "" };
+  const dir = path.replace(/\/+$/, "") + "/";
+  const counts = m.zones.map((z) => ({ z, n: z.zone.files.filter((f) => f.startsWith(dir)).length })).filter((c) => c.n > 0).sort((a, b) => b.n - a.n || b.z.danger - a.z.danger || (a.z.zone.id < b.z.zone.id ? -1 : 1));
+  if (!counts.length) return null;
+  const pick = counts[0];
+  const note = counts.length > 1 ? `"${target}" spans ${counts.length} zones; picked ${pick.z.zone.id}, which holds the most files under it (${pick.n}).` : "";
+  return { zone: pick.z, note };
+}
+var TEST_PATH = /(^|\/)(tests?|__tests__|specs?|e2e|fixtures?|__mocks__)\/|\.(test|spec)\.[^/]+$|_test\.go$|(^|\/)test_[^/]*\.py$/;
+var ENTRY_DIRS = /* @__PURE__ */ new Set([
+  "routes",
+  "route",
+  "router",
+  "controllers",
+  "controller",
+  "handlers",
+  "handler",
+  "pages",
+  "app",
+  "api",
+  "cli",
+  "cmd",
+  "bin",
+  "server",
+  "endpoints",
+  "views"
+]);
+var ENTRY_NAMES = /* @__PURE__ */ new Set(["main", "index", "server", "app", "cli", "routes", "router", "handler", "handlers", "manage", "wsgi", "asgi"]);
+var MARKERS = [
+  [/\b(?:app|server|fastify|api)\.(?:get|post|put|patch|delete|route|use)\s*\(/, "app.get("],
+  [/\brouter\.\w+\s*\(/, "router."],
+  [/@(?:Rest)?Controller\b|@(?:Request|Get|Post|Put|Delete|Patch)Mapping\b/, "@Controller"],
+  [/@(?:app|router|bp|blueprint)\.(?:route|get|post|put|delete)\b/, "@app.route"],
+  [/\bfunc main\s*\(/, "func main("],
+  [/if __name__ == ['"]__main__['"]/, "__name__ == '__main__'"],
+  [/^#!/, "shebang"]
+];
+function entryHint(path, source) {
+  if (TEST_PATH.test(path)) return null;
+  const segs = path.split("/");
+  const name = segs[segs.length - 1];
+  const inPagesOrApp = segs.slice(0, -1).some((s) => s === "pages" || s === "app");
+  if (source !== null) {
+    for (const [re, label3] of MARKERS) if (re.test(source)) return `marker: ${label3}`;
+    if (inPagesOrApp && /\bexport default (?:async )?function\b/.test(source)) return "marker: export default function";
+  }
+  const dir = segs.slice(0, -1).find((s) => ENTRY_DIRS.has(s));
+  if (dir) return `path: ${dir}/`;
+  const stem = name.replace(/\.[^.]+$/, "");
+  if (ENTRY_NAMES.has(stem)) return `name: ${name}`;
+  return null;
+}
+function readLines(root, path, cache) {
+  if (!cache.has(path)) {
+    try {
+      cache.set(path, readFileSync10(join10(root, path), "utf8").split("\n"));
+    } catch {
+      cache.set(path, null);
+    }
+  }
+  return cache.get(path);
+}
+var byCountThenName = (a, b) => b.n - a.n || (a.key < b.key ? -1 : a.key > b.key ? 1 : 0);
+function neighbours(edges, zoneOf, side, root, lines) {
+  const groups = /* @__PURE__ */ new Map();
+  for (const e of edges) {
+    const file = side === "importer" ? e.fromFile : e.toFile;
+    const z = zoneOf.get(file);
+    if (!z) continue;
+    const g2 = groups.get(z) ?? groups.set(z, /* @__PURE__ */ new Map()).get(z);
+    (g2.get(file) ?? g2.set(file, []).get(file)).push(e);
+  }
+  return [...groups.entries()].map(([zone, files]) => ({ zone, files, n: files.size, key: zone })).sort(byCountThenName).slice(0, MAX_NEIGHBOURS).map(({ zone, files }) => {
+    const top = [...files.entries()].map(([f, es]) => ({ f, es, n: es.length, key: f })).sort(byCountThenName).slice(0, MAX_FILES);
+    const imports = top.flatMap((t) => t.es).sort((a, b) => a.fromFile < b.fromFile ? -1 : a.fromFile > b.fromFile ? 1 : a.line - b.line).slice(0, MAX_IMPORTS).map((e) => ({
+      from: e.fromFile,
+      line: e.line,
+      to: e.toFile,
+      text: (readLines(root, e.fromFile, lines)?.[e.line - 1] ?? "").trim().slice(0, MAX_LINE)
+    }));
+    return { zone, files: top.map((t) => t.f).sort(), fileCount: files.size, imports };
+  });
+}
+function entryHints(root, zoneFiles, edges, lines) {
+  const importersOf = /* @__PURE__ */ new Map();
+  for (const e of edges) (importersOf.get(e.toFile) ?? importersOf.set(e.toFile, []).get(e.toFile)).push(e.fromFile);
+  const depth = new Map(zoneFiles.map((f) => [f, 0]));
+  let frontier = [...zoneFiles];
+  for (let d = 1; d <= HINT_DEPTH && frontier.length; d++) {
+    const next = [];
+    for (const f of frontier) {
+      for (const imp of importersOf.get(f) ?? []) {
+        if (depth.has(imp)) continue;
+        depth.set(imp, d);
+        next.push(imp);
+      }
+    }
+    frontier = next;
+  }
+  const hints = [];
+  for (const [file, d] of depth) {
+    const why = entryHint(file, readLines(root, file, lines)?.join("\n") ?? null);
+    if (why) hints.push({ file, depth: d, why });
+  }
+  return hints.sort((a, b) => a.depth - b.depth || (a.file < b.file ? -1 : 1)).slice(0, MAX_HINTS);
+}
+function zoneContext(root, m, z, picked) {
+  const zoneOf = zoneIndex(m.zones.map((r) => r.zone));
+  const edges = importEdges(root, [...zoneOf.keys()]);
+  const mine = new Set(z.zone.files);
+  const inEdges = edges.filter((e) => mine.has(e.toFile) && !mine.has(e.fromFile));
+  const outEdges = edges.filter((e) => mine.has(e.fromFile) && !mine.has(e.toFile));
+  const lines = /* @__PURE__ */ new Map();
+  return {
+    zone: { id: z.zone.id, files: z.zone.files, state: z.state, reason: z.reason, loc: z.zone.loc, fanIn: z.criticality.fanIn },
+    picked,
+    inbound: neighbours(inEdges, zoneOf, "importer", root, lines),
+    outbound: neighbours(outEdges, zoneOf, "imported", root, lines),
+    entryHints: entryHints(root, z.zone.files, edges, lines),
+    fingerprint: z.zone.fingerprint
+  };
+}
+function pickZone(m, root, target, cwd) {
+  if (target) {
+    const r = resolveTarget(m, root, target, cwd);
+    return r ? { zone: r.zone, picked: { by: "argument", note: r.note || r.zone.reason } } : { zone: null, why: `No zone found for "${target}".` };
+  }
+  const last = readLastLearn(root);
+  const lastZone = last && m.zones.find((z) => z.zone.id === last.zone);
+  if (lastZone) return { zone: lastZone, picked: { by: "last-learn", note: `the zone of your last learning session \xB7 ${lastZone.reason}` } };
+  const top = m.top[0] ?? m.unclearCritical[0];
+  if (top) return { zone: top, picked: { by: "top-danger", note: top.reason } };
+  return { zone: null, why: "Nothing stands out: no zone is both critical and poorly understood. Name a zone or path." };
+}
+
+// src/hooks.ts
+import { realpathSync as realpathSync2 } from "node:fs";
+import { dirname as dirname4, basename, isAbsolute, join as join11, relative as relative3, resolve as resolve2 } from "node:path";
+var isObj2 = (v) => typeof v === "object" && v !== null && !Array.isArray(v);
+function lineCount(s) {
+  if (typeof s !== "string" || s === "") return 0;
+  const n = s.split("\n").length;
+  return s.endsWith("\n") ? n - 1 : n;
+}
+function repoRelative(root, file, cwd) {
+  const abs = isAbsolute(file) ? file : resolve2(cwd, file);
+  const attempt = (p) => {
+    const rel = relative3(root, p);
+    return rel === "" || rel.startsWith("..") || isAbsolute(rel) ? null : rel.split("\\").join("/");
+  };
+  const direct = attempt(abs);
+  if (direct) return direct;
+  try {
+    return attempt(join11(realpathSync2(dirname4(abs)), basename(abs)));
+  } catch {
+    return null;
+  }
+}
+function rangesOf(response, input, tool) {
+  const patch = isObj2(response) && Array.isArray(response.structuredPatch) ? response.structuredPatch : null;
+  if (patch && patch.length > 0) {
+    const ranges = [];
+    let lines2 = 0;
+    for (const h of patch) {
+      if (!isObj2(h) || typeof h.newStart !== "number") continue;
+      if (Array.isArray(h.lines)) {
+        let n = h.newStart;
+        let runStart = -1;
+        const close = () => {
+          if (runStart >= 0) ranges.push([runStart, n - 1]);
+          runStart = -1;
+        };
+        for (const l of h.lines) {
+          const c = typeof l === "string" ? l[0] : "";
+          if (c === "+") {
+            if (runStart < 0) runStart = n;
+            n++;
+            lines2++;
+          } else if (c === "-") {
+            close();
+          } else {
+            close();
+            n++;
+          }
+        }
+        close();
+      } else if (typeof h.newLines === "number" && h.newLines > 0) {
+        ranges.push([h.newStart, h.newStart + h.newLines - 1]);
+        lines2 += h.newLines;
+      }
+    }
+    if (ranges.length > 0) return { ranges, lines: lines2 };
+  }
+  let lines = 0;
+  if (tool === "Write") lines = lineCount(input.content);
+  else if (tool === "MultiEdit" && Array.isArray(input.edits)) {
+    for (const e of input.edits) if (isObj2(e)) lines += lineCount(e.new_string);
+  } else if (tool === "NotebookEdit") lines = lineCount(input.new_source);
+  else lines = lineCount(input.new_string);
+  return { ranges: lines > 0 ? [[1, lines]] : [], lines };
+}
+function onPostToolUse(input) {
+  try {
+    if (!isObj2(input) || !isObj2(input.tool_input)) return;
+    const ti = input.tool_input;
+    const file = typeof ti.file_path === "string" ? ti.file_path : typeof ti.notebook_path === "string" ? ti.notebook_path : null;
+    if (!file) return;
+    const cwd = typeof input.cwd === "string" ? input.cwd : process.cwd();
+    const root = repoRootOf(cwd);
+    if (!root || !isSetUp(root)) return;
+    const rel = repoRelative(root, file, cwd);
+    if (!rel || excludeMatcher(loadConfig(root).exclude)(rel)) return;
+    const { ranges, lines } = rangesOf(input.tool_response, ti, input.tool_name);
+    appendEdit(root, {
+      file: rel,
+      ranges,
+      lines,
+      session: typeof input.session_id === "string" ? input.session_id : "",
+      ts: (/* @__PURE__ */ new Date()).toISOString()
+    });
+  } catch {
+  }
+}
+function onStop(input) {
+  try {
+    if (!isObj2(input)) return null;
+    const cwd = typeof input.cwd === "string" ? input.cwd : process.cwd();
+    const root = repoRootOf(cwd);
+    if (!root || !isSetUp(root)) return null;
+    const { handoff, exclude } = loadConfig(root);
+    if (!handoff.enabled) return null;
+    const isExcluded = excludeMatcher(exclude);
+    const edits = uncheckedEdits(root).filter((e) => !isExcluded(e.file));
+    const unchecked = edits.reduce((n, e) => n + e.lines, 0);
+    if (unchecked - getNudgedLines(root) < handoff.minLines) return null;
+    const cache = readZoneCache(root);
+    const zones = new Set(edits.map((e) => cache?.[e.file] ?? dirname4(e.file)));
+    setNudgedLines(root, unchecked);
+    return JSON.stringify({
+      systemMessage: `Agents changed ~${unchecked} lines in ${zones.size} zones since your last check. Run /understanding-map:handoff for a 60-second check.`
+    });
+  } catch {
+    return null;
+  }
+}
+
 // src/report.ts
-import { mkdirSync as mkdirSync7, writeFileSync as writeFileSync7 } from "node:fs";
-import { join as join10 } from "node:path";
+import { mkdirSync as mkdirSync8, writeFileSync as writeFileSync8 } from "node:fs";
+import { join as join12 } from "node:path";
 
 // node_modules/d3-hierarchy/dist/d3-hierarchy.mjs
 function count(node) {
@@ -3667,6 +3940,10 @@ var resquarify = function custom2(ratio) {
   return resquarify2;
 }(phi);
 
+// src/html.ts
+var esc = (s) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+var safeJson = (v) => JSON.stringify(v).replace(/</g, "\\u003c").replace(/\u2028/g, "\\u2028").replace(/\u2029/g, "\\u2029");
+
 // src/report-template.ts
 function howEstimatesWork(mode, s) {
   const pct2 = (f) => `${Math.round(f * 100)}%`;
@@ -3684,14 +3961,7 @@ function howEstimatesWork(mode, s) {
   ];
   return `<ul class="method">${items.map((i) => `<li>${i}</li>`).join("")}</ul>`;
 }
-var REPORT_TEMPLATE = String.raw`<!doctype html>
-<html lang="en">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Understanding Map</title>
-<style>
-:root {
+var THEME_CSS = String.raw`:root {
   --bg: #f7f6f2; --surface: #ffffff; --text: #1f2328; --muted: #5c6470; --border: #dcdad2;
   --owned: #2f9e5b; --fragile: #e0a21a; --fading: #f2d38a; --dark: #a11d2b; --unknown: #9aa0a8;
   --on-owned: #ffffff; --on-fragile: #1f2328; --on-fading: #1f2328; --on-dark: #ffffff; --on-unknown: #1f2328;
@@ -3707,7 +3977,15 @@ var REPORT_TEMPLATE = String.raw`<!doctype html>
     --accent: #6ea8ff;
   }
 }
-* { box-sizing: border-box; }
+`;
+var REPORT_TEMPLATE = String.raw`<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Understanding Map</title>
+<style>
+${THEME_CSS}* { box-sizing: border-box; }
 html { background: var(--bg); }
 body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.5 var(--font); }
 main { max-width: 1100px; margin: 0 auto; padding: 16px; }
@@ -3738,6 +4016,7 @@ tbody tr:hover, tbody tr.sel { background: color-mix(in srgb, var(--accent) 12%,
 #panel h4 { margin: 14px 0 4px; font-size: 0.9rem; color: var(--muted); }
 #panel ul { margin: 0; padding-left: 20px; }
 .cmd { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 14px; }
+.cmd a { color: var(--accent); font-weight: 600; }
 .cmd code { font-family: var(--mono); background: var(--bg); border: 1px solid var(--border); border-radius: 6px; padding: 4px 8px; word-break: break-all; }
 .method { padding-left: 20px; color: var(--muted); font-size: 0.88rem; }
 .method li { margin: 4px 0; }
@@ -3814,7 +4093,16 @@ __METHOD__
       panel.appendChild(list(z.flags));
     }
     if (z.agentShare > 0) panel.appendChild(el('p', 'About ' + Math.max(1, Math.round(z.agentShare * 100)) + '% of this zone was written by agents.', 'note'));
-    var cmd = '/understanding-map:learn ' + z.id;
+    panel.appendChild(cmdRow('/understanding-map:learn ' + z.id));
+    var vis = cmdRow('/understanding-map:visualize ' + z.id);
+    if (z.visual) {
+      var a = el('a', 'Open animation');
+      a.href = z.visual;
+      vis.appendChild(a);
+    }
+    panel.appendChild(vis);
+  }
+  function cmdRow(cmd) {
     var row = el('div', undefined, 'cmd');
     row.appendChild(el('code', cmd));
     var btn = el('button', 'Copy');
@@ -3824,7 +4112,7 @@ __METHOD__
       catch (e) { btn.textContent = 'Copy failed'; }
     });
     row.appendChild(btn);
-    panel.appendChild(row);
+    return row;
   }
   document.querySelectorAll('[data-id]').forEach(function (n) {
     n.addEventListener('click', function () { show(n.getAttribute('data-id')); });
@@ -3837,7 +4125,6 @@ __METHOD__
 `;
 
 // src/report.ts
-var esc = (s) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
 var label = (s) => s[0].toUpperCase() + s.slice(1);
 function buildTree(zones) {
   const root = { name: "", children: [] };
@@ -3865,10 +4152,10 @@ function renderTreemap(zones) {
     const z = l.data.zone;
     const w = l.x1 - l.x0;
     const h = l.y1 - l.y0;
-    const text = w >= 9 && h >= 7 ? esc(z.zone.id) : "";
+    const text3 = w >= 9 && h >= 7 ? esc(z.zone.id) : "";
     const title = esc(`${z.zone.id} \u2014 ${label(z.state)} \xB7 ${z.zone.loc} lines`);
     const pos = `left:${l.x0.toFixed(3)}%;top:${l.y0.toFixed(3)}%;width:${w.toFixed(3)}%;height:${h.toFixed(3)}%`;
-    return `<div class="tile s-${z.state}" role="button" tabindex="0" data-id="${esc(z.zone.id)}" title="${title}" style="${pos}">${text}</div>`;
+    return `<div class="tile s-${z.state}" role="button" tabindex="0" data-id="${esc(z.zone.id)}" title="${title}" style="${pos}">${text3}</div>`;
   }).join("\n");
 }
 function renderTable(zones) {
@@ -3882,7 +4169,8 @@ function renderHeader(m) {
 <ul class="counts">${chips}</ul>
 <p class="note">Scores are estimates from git history and sessions \u2014 each one lists its evidence.</p>`;
 }
-function reportData(m, threshold) {
+var VISUAL_HREF = /^local\/visuals\/[a-z0-9-]+\.html$/;
+function reportData(m, threshold, visuals) {
   const team = m.mode === "team";
   return {
     mode: m.mode,
@@ -3901,12 +4189,12 @@ function reportData(m, threshold) {
         flags: z.flags,
         people: listed.map((p) => ({ handle: p.handle, level: p.level, active: p.active, evidence: p.evidence })),
         understoodBy: team ? z.people.filter((p) => p.active && p.level >= threshold).map((p) => p.handle) : [],
-        leftInactive: team ? z.people.filter((p) => !p.active).map((p) => p.handle) : []
+        leftInactive: team ? z.people.filter((p) => !p.active).map((p) => p.handle) : [],
+        visual: Object.hasOwn(visuals, z.zone.id) && VISUAL_HREF.test(visuals[z.zone.id]) ? visuals[z.zone.id] : null
       };
     })
   };
 }
-var safeJson = (v) => JSON.stringify(v).replace(/</g, "\\u003c").replace(/\u2028/g, "\\u2028").replace(/\u2029/g, "\\u2029");
 function renderReport(m, opts = {}) {
   const settings = {
     threshold: opts.threshold ?? DEFAULT_CONFIG.threshold,
@@ -3918,145 +4206,1042 @@ function renderReport(m, opts = {}) {
     __HEADER__: renderHeader(m),
     __TREEMAP__: renderTreemap(m.zones),
     __TABLE__: renderTable(m.zones),
-    __DATA__: safeJson(reportData(m, settings.threshold)),
+    __DATA__: safeJson(reportData(m, settings.threshold, opts.visuals ?? {})),
     __METHOD__: howEstimatesWork(m.mode, settings)
   };
   return REPORT_TEMPLATE.replace(/__(HEADER|TREEMAP|TABLE|DATA|METHOD)__/g, (k) => fill[k]);
 }
 function writeReport(root, html) {
-  const dir = join10(root, ".understanding");
-  mkdirSync7(dir, { recursive: true });
-  const path = join10(dir, "report.html");
-  writeFileSync7(path, html);
+  const dir = join12(root, ".understanding");
+  mkdirSync8(dir, { recursive: true });
+  const path = join12(dir, "report.html");
+  writeFileSync8(path, html);
   return path;
 }
 
-// src/record.ts
-import { dirname as dirname4 } from "node:path";
-var SCORE = { pass: 1, partial: 0.5, miss: 0 };
-var DAY2 = 864e5;
-function gradeSession(grades) {
-  if (grades.length === 0) return "miss";
-  const avg = grades.reduce((s, g) => s + SCORE[g], 0) / grades.length;
-  if (avg >= 0.67 && !grades.includes("miss")) return "pass";
-  return avg >= 0.34 ? "partial" : "miss";
-}
-function handoffSet(root) {
-  const isExcluded = excludeMatcher(loadConfig(root).exclude);
-  const edits = uncheckedEdits(root).filter((e) => !isExcluded(e.file));
-  const cache = readZoneCache(root) ?? {};
-  const by = /* @__PURE__ */ new Map();
-  for (const e of edits) {
-    const dir = dirname4(e.file);
-    const id = cache[e.file] ?? (dir === "." ? "(root)" : dir);
-    const z = by.get(id) ?? { zone: id, lines: 0, files: [] };
-    z.lines += e.lines;
-    if (!z.files.includes(e.file)) z.files.push(e.file);
-    by.set(id, z);
-  }
-  return {
-    totalLines: edits.reduce((s, e) => s + e.lines, 0),
-    zones: [...by.values()].sort((a, b) => b.lines - a.lines),
-    edits
-  };
-}
-function clearHandoff(root, edits) {
-  if (edits.length) markChecked(root, edits.reduce((m, e) => e.ts > m ? e.ts : m, ""));
-}
-function recordResult(root, r) {
-  const now = r.now ?? /* @__PURE__ */ new Date();
-  const date = now.toISOString();
-  const opts = { now, homeDir: r.homeDir };
-  const result = gradeSession(r.grades);
-  const handoff = r.kind === "handoff" ? handoffSet(root) : null;
-  const zoneIds = handoff ? handoff.zones.map((z) => z.zone) : r.zones;
-  const before = buildMap(root, opts);
-  const levelOf = (m, id) => m.zones.find((z) => z.zone.id === id)?.people.find((p) => p.handle === m.me)?.level ?? 0;
-  const live = zoneIds.filter((id) => before.zones.some((z) => z.zone.id === id));
-  if (handoff) {
-    if (result === "pass") {
-      for (const id of live) {
-        const z = before.zones.find((x) => x.zone.id === id);
-        appendPass(root, before.me, { zone: id, level: Math.max(levelOf(before, id), HANDOFF_PASS_LEVEL), fingerprint: z.zone.fingerprint, date, kind: "handoff" });
-      }
-      for (const id of zoneIds) removeFlag(root, id, "unreviewed-agent-code");
-    } else if (result === "miss") {
-      for (const id of zoneIds) addFlag(root, id, "unreviewed-agent-code");
-    }
-    clearHandoff(root, handoff.edits);
-  } else {
-    for (const id of live) {
-      const z = before.zones.find((x) => x.zone.id === id);
-      const current = levelOf(before, id);
-      if (result === "pass") {
-        appendPass(root, before.me, { zone: id, level: Math.max(current, SESSION_PASS_LEVEL), fingerprint: z.zone.fingerprint, date, kind: "session" });
-        removeFlag(root, id, "hard-to-verify");
-        removeFlag(root, id, "unreviewed-agent-code");
-      } else if (result === "partial") {
-        appendLocalPartial(root, { zone: id, level: Math.max(current, PARTIAL_LEVEL), fingerprint: z.zone.fingerprint, date, kind: "session" });
-        appendAttempt(root, { zone: id, kind: "session", result: "partial", date });
-      } else {
-        appendAttempt(root, { zone: id, kind: "session", result: "miss", date, retryAfter: new Date(now.getTime() + 3 * DAY2).toISOString() });
-      }
-    }
-  }
-  const after = buildMap(root, opts);
-  const changes = live.map((id) => ({
-    zone: id,
-    before: before.zones.find((z) => z.zone.id === id).state,
-    after: after.zones.find((z) => z.zone.id === id)?.state ?? "unknown",
-    levelBefore: levelOf(before, id),
-    levelAfter: levelOf(after, id)
-  }));
-  return { result, changes };
-}
-function skipHandoff(root, _now = /* @__PURE__ */ new Date()) {
-  const set = handoffSet(root);
-  for (const z of set.zones) addFlag(root, z.zone, "unreviewed-agent-code");
-  clearHandoff(root, set.edits);
-}
-function markUnverifiable(root, zone) {
-  addFlag(root, zone, "hard-to-verify");
-}
-
 // src/setup.ts
-import { existsSync as existsSync3, mkdirSync as mkdirSync8, readFileSync as readFileSync9, writeFileSync as writeFileSync8 } from "node:fs";
-import { join as join11 } from "node:path";
+import { existsSync as existsSync3, mkdirSync as mkdirSync9, readFileSync as readFileSync11, writeFileSync as writeFileSync9 } from "node:fs";
+import { join as join13 } from "node:path";
 var TEAM_ATTRIBUTES = [
   ".understanding/events/*.jsonl merge=union",
   ".understanding/agent-share/*.jsonl merge=union"
 ];
 function runSetup(root, opts) {
   const dir = umDir(root);
-  mkdirSync8(dir, { recursive: true });
-  const configPath2 = join11(dir, "config.json");
+  mkdirSync9(dir, { recursive: true });
+  const configPath2 = join13(dir, "config.json");
   let existing = {};
   if (existsSync3(configPath2)) {
     try {
-      const raw = JSON.parse(readFileSync9(configPath2, "utf8"));
+      const raw = JSON.parse(readFileSync11(configPath2, "utf8"));
       if (typeof raw === "object" && raw !== null && !Array.isArray(raw)) existing = raw;
     } catch {
     }
   }
-  const kept = Array.isArray(existing.critical) && existing.critical.every((g) => typeof g === "string") ? existing.critical : [];
+  const kept = Array.isArray(existing.critical) && existing.critical.every((g2) => typeof g2 === "string") ? existing.critical : [];
   const critical = opts.critical ?? kept;
-  writeFileSync8(configPath2, JSON.stringify({ ...existing, mode: opts.mode, critical }, null, 2) + "\n");
+  writeFileSync9(configPath2, JSON.stringify({ ...existing, mode: opts.mode, critical }, null, 2) + "\n");
   const ignore = opts.mode === "team" ? TEAM_IGNORE : SOLO_IGNORE;
   const gitignoreLines = ignore.trimEnd().split("\n");
-  writeFileSync8(join11(dir, ".gitignore"), ignore);
+  writeFileSync9(join13(dir, ".gitignore"), ignore);
   const gitattributesLines = [];
   if (opts.mode === "team") {
-    const attrPath = join11(root, ".gitattributes");
-    const current = existsSync3(attrPath) ? readFileSync9(attrPath, "utf8") : "";
+    const attrPath = join13(root, ".gitattributes");
+    const current = existsSync3(attrPath) ? readFileSync11(attrPath, "utf8") : "";
     const have = new Set(current.split(/\r?\n/).map((l) => l.trim()));
     gitattributesLines.push(...TEAM_ATTRIBUTES.filter((l) => !have.has(l)));
     if (gitattributesLines.length > 0) {
-      const sep2 = current === "" || current.endsWith("\n") ? "" : "\n";
-      writeFileSync8(attrPath, current + sep2 + gitattributesLines.join("\n") + "\n");
+      const sep3 = current === "" || current.endsWith("\n") ? "" : "\n";
+      writeFileSync9(attrPath, current + sep3 + gitattributesLines.join("\n") + "\n");
     }
   }
   machineId(root);
   return { configPath: configPath2, critical, gitignoreLines, gitattributesLines };
+}
+
+// src/storyboard.ts
+import { readFileSync as readFileSync12, realpathSync as realpathSync3, statSync as statSync2 } from "node:fs";
+import { join as join14, sep as sep2 } from "node:path";
+var LABEL_MAX = 40;
+var ROLE_MAX = 90;
+var JOURNEY_MIN = 2;
+var JOURNEY_MAX = 6;
+var STEPS_MIN = 3;
+var STEPS_MAX = 7;
+var StoryboardError = class extends Error {
+  constructor(field, message) {
+    super(`${field}: ${message}`);
+    this.field = field;
+    this.name = "StoryboardError";
+  }
+};
+var fail = (field, message) => {
+  throw new StoryboardError(field, message);
+};
+var isObj3 = (v) => typeof v === "object" && v !== null && !Array.isArray(v);
+var chars = (s) => [...s].length;
+var CONTROL = /[\u0000-\u001f\u007f\u2028\u2029\u202a-\u202e\u2066-\u2069]/;
+var MENTION = /@[A-Za-z0-9_]/;
+var escapeRe = (x) => x.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+function text(v, field, max, ctx) {
+  if (typeof v !== "string") return fail(field, "must be a string");
+  const s = v.trim();
+  if (!s) return fail(field, "must not be empty");
+  if (CONTROL.test(s)) return fail(field, "must be one line of plain text");
+  if (chars(s) > max) return fail(field, `is ${chars(s)} characters; the limit is ${max}`);
+  if (MENTION.test(s)) return fail(field, "must not name people (no @mentions or email addresses)");
+  for (const h of ctx.people ?? []) {
+    if (h.length >= 3 && new RegExp(`(^|[^a-z0-9])${escapeRe(h.toLowerCase())}($|[^a-z0-9])`).test(s.toLowerCase())) {
+      return fail(field, "must not name people (it contains a handle from the map)");
+    }
+  }
+  return s;
+}
+function parseRef(ref2) {
+  const m = /^(.+):([1-9]\d*)$/.exec(ref2);
+  if (!m) return null;
+  const path = m[1].replace(/^\.\//, "");
+  if (path.startsWith("/") || /^[A-Za-z]:/.test(path) || path.includes("\\")) return null;
+  if (path.split("/").some((s) => s === ".." || s === "." || s === "")) return null;
+  return { path, line: Number(m[2]) };
+}
+function ref(v, field, ctx, within) {
+  if (typeof v !== "string") return fail(field, 'must be a "path:line" string');
+  const r = parseRef(v.trim());
+  if (!r) return fail(field, `"${v}" must be "path:line" with a repository-relative path and a line from 1`);
+  const n = ctx.lineCount(r.path);
+  if (n === null) return fail(field, `${r.path} is not a file on the map (tracked and not excluded)`);
+  if (r.line > n) return fail(field, `line ${r.line} is past the end of ${r.path} (${n} lines)`);
+  if (within && !within.files.includes(r.path)) return fail(field, `${r.path} is not in zone ${within.zone}`);
+  return `${r.path}:${r.line}`;
+}
+function optional(v, field) {
+  if (v === void 0 || v === null) return null;
+  return isObj3(v) ? v : fail(field, "must be an object or null");
+}
+function journey(v, ctx) {
+  if (v === void 0 || v === null) return null;
+  if (!Array.isArray(v) || v.length < JOURNEY_MIN || v.length > JOURNEY_MAX) {
+    return fail("journey", `must have ${JOURNEY_MIN}\u2013${JOURNEY_MAX} stops (or be left out)`);
+  }
+  const targets = v.filter((s) => isObj3(s) && s.target === true).length;
+  if (targets !== 1) return fail("journey", `needs exactly one stop with "target": true (found ${targets})`);
+  return v.map((s, i) => {
+    const f = `journey[${i}]`;
+    if (!isObj3(s)) return fail(f, "must be an object");
+    if (s.target !== void 0 && typeof s.target !== "boolean") fail(`${f}.target`, "must be true or false");
+    const target = s.target === true;
+    const label3 = text(s.label, `${f}.label`, LABEL_MAX, ctx);
+    if (typeof s.zone !== "string" || !Object.hasOwn(ctx.zones, s.zone)) {
+      return fail(`${f}.zone`, `"${String(s.zone)}" is not a zone on the map`);
+    }
+    if (target && s.zone !== ctx.zone) return fail(`${f}.zone`, `the target stop must be the visualised zone ${ctx.zone}`);
+    const stop = { label: label3, zone: s.zone, ref: ref(s.ref, `${f}.ref`, ctx, { zone: s.zone, files: ctx.zones[s.zone] }), target };
+    if (target) stop.role = text(s.role, `${f}.role`, ROLE_MAX, ctx);
+    return stop;
+  });
+}
+function validateStoryboard(raw, ctx) {
+  if (!isObj3(raw)) return fail("storyboard", "must be a JSON object");
+  if (raw.zone !== ctx.zone) return fail("zone", `must be "${ctx.zone}"`);
+  const trig = optional(raw.trigger, "trigger");
+  const trigger = trig && { label: text(trig.label, "trigger.label", LABEL_MAX, ctx), ref: ref(trig.ref, "trigger.ref", ctx) };
+  const stops = journey(raw.journey, ctx);
+  const out2 = optional(raw.outcome, "outcome");
+  const outcome = out2 && { label: text(out2.label, "outcome.label", LABEL_MAX, ctx) };
+  if (!Array.isArray(raw.steps) || raw.steps.length < STEPS_MIN || raw.steps.length > STEPS_MAX) {
+    return fail("steps", `must have ${STEPS_MIN}\u2013${STEPS_MAX} steps`);
+  }
+  const zone = { zone: ctx.zone, files: ctx.zones[ctx.zone] ?? [] };
+  const steps = raw.steps.map((s, i) => {
+    if (!isObj3(s)) return fail(`steps[${i}]`, "must be an object");
+    return { label: text(s.label, `steps[${i}].label`, LABEL_MAX, ctx), ref: ref(s.ref, `steps[${i}].ref`, ctx, zone) };
+  });
+  const g2 = optional(raw.gotcha, "gotcha");
+  const gotcha = g2 && { label: text(g2.label, "gotcha.label", LABEL_MAX, ctx), ref: ref(g2.ref, "gotcha.ref", ctx) };
+  return { zone: ctx.zone, trigger, journey: stops, outcome, steps, gotcha };
+}
+function refFiles(s) {
+  const refs = [s.trigger?.ref, ...(s.journey ?? []).map((j) => j.ref), ...s.steps.map((x) => x.ref), s.gotcha?.ref];
+  return [...new Set(refs.flatMap((r) => r ? [parseRef(r)?.path ?? ""] : []).filter(Boolean))].sort();
+}
+function mapLineCounter(root, mapFiles) {
+  const known = new Set(mapFiles);
+  const count2 = repoLineCounter(root);
+  return (path) => known.has(path) ? count2(path) : null;
+}
+function repoLineCounter(root) {
+  let base;
+  try {
+    base = realpathSync3(root);
+  } catch {
+    return () => null;
+  }
+  return (path) => {
+    if (!parseRef(`${path}:1`) || path === ".git" || path.startsWith(".git/")) return null;
+    try {
+      const full = realpathSync3(join14(base, path));
+      if (!full.startsWith(base + sep2) || full.slice(base.length + 1).split(sep2)[0] === ".git") return null;
+      if (!statSync2(full).isFile()) return null;
+      const lines = readFileSync12(full, "utf8").split("\n");
+      return lines[lines.length - 1] === "" ? lines.length - 1 : lines.length;
+    } catch {
+      return null;
+    }
+  };
+}
+
+// src/layout.ts
+var WIDE = 1280;
+var NARROW = 375;
+var FitError = class extends Error {
+  constructor(field, message) {
+    super(`${field}: ${message}`);
+    this.field = field;
+    this.name = "FitError";
+  }
+};
+var BOLD = 1.06;
+var MONO_EM = 0.62;
+var NARROW_CH = /* @__PURE__ */ new Set([..."ijl.,:;'!|`"]);
+var SEMI_CH = /* @__PURE__ */ new Set([...'frt()[]{}/\\-"*']);
+var WIDE_LOWER = /* @__PURE__ */ new Set([..."mw"]);
+var WIDE_UPPER = /* @__PURE__ */ new Set([..."MW@%&"]);
+function charEm(ch, mono) {
+  const cp = ch.codePointAt(0);
+  if (cp >= 4352) return 1.1;
+  if (mono) return MONO_EM;
+  if (ch === " ") return 0.32;
+  if (NARROW_CH.has(ch)) return 0.3;
+  if (SEMI_CH.has(ch)) return 0.42;
+  if (WIDE_UPPER.has(ch)) return 0.98;
+  if (WIDE_LOWER.has(ch)) return 0.9;
+  if (ch >= "A" && ch <= "Z") return 0.74;
+  if (ch >= "a" && ch <= "z") return 0.6;
+  if (ch >= "0" && ch <= "9") return 0.62;
+  return cp > 127 ? 0.7 : 0.62;
+}
+function measure(s, st) {
+  let em = 0;
+  for (const ch of s) em += charEm(ch, !!st.mono);
+  return em * st.size * (st.bold ? BOLD : 1);
+}
+function breakWord(word, maxW, st) {
+  const out2 = [];
+  let rest = [...word];
+  while (rest.length) {
+    let n = 0;
+    while (n < rest.length && measure(rest.slice(0, n + 1).join(""), st) <= maxW) n++;
+    if (n === 0) n = 1;
+    if (n < rest.length) {
+      const piece = rest.slice(0, n);
+      let at = -1;
+      for (let i = piece.length - 1; i > 0; i--) if ("/:-_.".includes(piece[i])) {
+        at = i;
+        break;
+      }
+      if (at >= Math.floor(n / 2)) n = at + 1;
+    }
+    out2.push(rest.slice(0, n).join(""));
+    rest = rest.slice(n);
+  }
+  return out2;
+}
+function wrap(text3, maxW, st) {
+  const words = text3.split(/\s+/).filter(Boolean);
+  const lines = [];
+  let cur = "";
+  for (const w of words) {
+    const joined = cur ? `${cur} ${w}` : w;
+    if (measure(joined, st) <= maxW) {
+      cur = joined;
+      continue;
+    }
+    if (cur) lines.push(cur);
+    cur = "";
+    if (measure(w, st) <= maxW) {
+      cur = w;
+      continue;
+    }
+    const pieces = breakWord(w, maxW, st);
+    lines.push(...pieces.slice(0, -1));
+    cur = pieces[pieces.length - 1];
+  }
+  if (cur) lines.push(cur);
+  return lines.length ? lines : [""];
+}
+var LH = 1.3;
+function block(text3, x, y, w, st, align, lines) {
+  const ls = lines ?? wrap(text3, w, st);
+  const lh = Math.round(st.size * LH * 10) / 10;
+  return { x, y, w, h: ls.length * lh, lines: ls, size: st.size, lh, mono: !!st.mono, bold: !!st.bold, align };
+}
+function sharedSize(texts, w, sizes, maxLines, st) {
+  for (const size of sizes) if (texts.every((t) => wrap(t, w, { ...st, size }).length <= maxLines)) return size;
+  return null;
+}
+function fitOrFail(items, w, sizes, maxLines, st, what) {
+  const size = sharedSize(items.map((i) => i.text), w, sizes, maxLines, st);
+  if (size !== null) return size;
+  const bad = items.find((i) => wrap(i.text, w, { ...st, size: sizes[sizes.length - 1] }).length > maxLines);
+  throw new FitError(bad.field, `is too wide to fit ${what} in ${maxLines} line${maxLines > 1 ? "s" : ""}; shorten it`);
+}
+function pill(text3, cx, y, maxTextW, st, padX, padY, bounds, lines) {
+  const ls = lines ?? wrap(text3, maxTextW, st);
+  const tw = Math.max(...ls.map((l) => measure(l, st)));
+  const w = Math.min(Math.max(tw + 2 * padX, 64), maxTextW + 2 * padX);
+  const x = Math.min(Math.max(cx - w / 2, bounds[0]), bounds[1] - w);
+  const t = block(text3, x + padX, y + padY, w - 2 * padX, st, "middle", ls);
+  return { rect: { x, y, w, h: t.h + 2 * padY }, text: t };
+}
+var bottom = (r) => r.y + r.h;
+var cxOf = (r) => r.x + r.w / 2;
+var cyOf = (r) => r.y + r.h / 2;
+var METRICS = {
+  wide: {
+    M: 32,
+    headingY: 24,
+    heading: 16,
+    zone: 44,
+    badge: 18,
+    body: 24,
+    whyTop: 110,
+    labelSizes: [16, 15, 14, 13, 12],
+    pillSizes: [15, 14, 13, 12],
+    roleSizes: [20, 19, 18, 17, 16, 15],
+    roleLines: 3,
+    chip: 14,
+    stepSizes: [19, 18, 17, 16, 15],
+    insideTitle: 24,
+    gotchaSizes: [20, 19, 18, 17, 16],
+    closing: 20,
+    boxPadX: 10,
+    boxPadY: 12
+  },
+  narrow: {
+    M: 12,
+    headingY: 14,
+    heading: 14,
+    zone: 26,
+    badge: 15,
+    body: 17,
+    whyTop: 70,
+    labelSizes: [14, 13, 12, 11],
+    pillSizes: [14, 13, 12, 11],
+    roleSizes: [15, 14, 13, 12],
+    roleLines: 4,
+    chip: 12,
+    stepSizes: [16, 15, 14, 13],
+    insideTitle: 17,
+    gotchaSizes: [16, 15, 14, 13],
+    closing: 15,
+    boxPadX: 8,
+    boxPadY: 10
+  }
+};
+function layoutJourney(j, heading, W, m, narrow) {
+  const n = j.stops.length;
+  const rowW = W - 2 * m.M;
+  const boxW = narrow ? (rowW - 28) / 2 : Math.min(200, (rowW - (n - 1) * 36) / n);
+  const gap = narrow ? 28 : Math.min(80, (rowW - n * boxW) / (n - 1));
+  const textW = boxW - 2 * m.boxPadX;
+  const labelSize = fitOrFail(j.stops.map((s) => ({ text: s.label, field: s.field })), textW, m.labelSizes, 2, { bold: true }, "in its box");
+  const lst = { size: labelSize, bold: true };
+  const lh = Math.round(labelSize * LH * 10) / 10;
+  const boxH = 2 * lh + 2 * m.boxPadY;
+  const pillPadX = 14;
+  const pillPadY = 8;
+  const pillTextMax = narrow ? rowW - 2 * pillPadX : Math.min(320, (rowW - 24) / 2 - 2 * pillPadX);
+  const pillItems = [{ text: j.start.label, field: j.start.field }, ...j.outcome ? [{ text: j.outcome.label, field: j.outcome.field }] : []];
+  const pillSize = fitOrFail(pillItems, pillTextMax, m.pillSizes, 2, {}, "in its pill");
+  const pst = { size: pillSize };
+  const pillsTop = bottom(heading) + (narrow ? 22 : 56);
+  const rowX0 = narrow ? m.M : (W - (n * boxW + (n - 1) * gap)) / 2;
+  const slot = (i) => {
+    if (!narrow) return { col: i, row: 0 };
+    const row = Math.floor(i / 2);
+    const inRow = i % 2;
+    return { col: row % 2 === 0 ? inRow : 1 - inRow, row };
+  };
+  const firstCx = rowX0 + slot(0).col * (boxW + gap) + boxW / 2;
+  const startBounds = narrow ? [m.M, W - m.M] : [m.M, W / 2 - 12];
+  const start = pill(j.start.label, firstCx, pillsTop, pillTextMax, pst, pillPadX, pillPadY, startBounds);
+  let outcome = null;
+  const lastSlot = slot(n - 1);
+  const lastCx = rowX0 + lastSlot.col * (boxW + gap) + boxW / 2;
+  if (j.outcome && !narrow) outcome = pill(j.outcome.label, lastCx, pillsTop, pillTextMax, pst, pillPadX, pillPadY, [W / 2 + 12, W - m.M]);
+  const bandBottom = Math.max(bottom(start.rect), outcome ? bottom(outcome.rect) : 0);
+  const rowTop = bandBottom + (narrow ? 32 : 44);
+  const boxes = j.stops.map((s, i) => {
+    const { col, row } = slot(i);
+    const rect2 = { x: rowX0 + col * (boxW + gap), y: rowTop + row * (boxH + 36), w: boxW, h: boxH };
+    const lines = wrap(s.label, textW, lst);
+    const th = lines.length * lh;
+    const label3 = block(s.label, rect2.x + m.boxPadX, rect2.y + (boxH - th) / 2, textW, lst, "middle", lines);
+    return { rect: rect2, label: label3, target: s.target };
+  });
+  const gridBottom = Math.max(...boxes.map((b) => bottom(b.rect)));
+  if (j.outcome && narrow) {
+    outcome = pill(j.outcome.label, lastCx, gridBottom + 32, pillTextMax, pst, pillPadX, pillPadY, [m.M, W - m.M]);
+  }
+  const arrows = [];
+  const b0 = boxes[0].rect;
+  const ax = Math.min(Math.max(cxOf(b0), start.rect.x + pillPadX), start.rect.x + start.rect.w - pillPadX);
+  arrows.push([{ x: ax, y: bottom(start.rect) + 4 }, { x: ax, y: b0.y - 4 }]);
+  for (let i = 1; i < n; i++) {
+    const a = boxes[i - 1].rect;
+    const b = boxes[i].rect;
+    if (a.y === b.y) {
+      const leftToRight = a.x < b.x;
+      arrows.push([{ x: leftToRight ? a.x + a.w + 4 : a.x - 4, y: cyOf(a) }, { x: leftToRight ? b.x - 4 : b.x + b.w + 4, y: cyOf(b) }]);
+    } else {
+      arrows.push([{ x: cxOf(a), y: bottom(a) + 4 }, { x: cxOf(b), y: b.y - 4 }]);
+    }
+  }
+  const last = boxes[n - 1].rect;
+  if (outcome) {
+    const ox = Math.min(Math.max(cxOf(last), outcome.rect.x + pillPadX), outcome.rect.x + outcome.rect.w - pillPadX);
+    arrows.push(narrow ? [{ x: ox, y: bottom(last) + 4 }, { x: ox, y: outcome.rect.y - 4 }] : [{ x: ox, y: last.y - 4 }, { x: ox, y: bottom(outcome.rect) + 4 }]);
+  }
+  const below = Math.max(gridBottom, outcome ? bottom(outcome.rect) : 0);
+  const roleW = Math.min(880, rowW);
+  const roleSize = fitOrFail([{ text: j.role.text, field: j.role.field }], roleW, m.roleSizes, m.roleLines, {}, "under the journey");
+  const role = block(j.role.text, (W - roleW) / 2, below + (narrow ? 28 : 40), roleW, { size: roleSize }, "middle");
+  const chipSt = { size: m.chip, mono: true };
+  const roleRef = pill(j.roleRef, W / 2, bottom(role) + 12, roleW - 20, chipSt, 10, 5, [m.M, W - m.M]);
+  const target = boxes.find((b) => b.target).rect;
+  const roleLink = narrow ? null : [{ x: cxOf(target), y: bottom(target) + 4 }, { x: cxOf(target), y: role.y - 6 }];
+  return { heading, start, outcome, boxes, arrows, role, roleRef, roleLink, target };
+}
+function layoutAt(input, W) {
+  const narrow = W < 640;
+  const m = METRICS[narrow ? "narrow" : "wide"];
+  const rowW = W - 2 * m.M;
+  const head = (t) => block(t, m.M, m.headingY, rowW, { size: m.heading, bold: true }, "start");
+  const chipSt = { size: m.chip, mono: true };
+  const zone = block(input.zoneId, m.M, m.whyTop, rowW, { size: m.zone, mono: true, bold: true }, "start");
+  const badgeSt = { size: m.badge, bold: true };
+  const bw = measure(input.stateLabel, badgeSt) + 28;
+  const badgeText = block(input.stateLabel, m.M + 14, bottom(zone) + 24 + 6, bw - 28, badgeSt, "middle", [input.stateLabel]);
+  const badge = { rect: { x: m.M, y: bottom(zone) + 24, w: bw, h: badgeText.h + 12 }, text: badgeText };
+  const reason = block(input.reason, m.M, bottom(badge.rect) + 24, rowW, { size: m.body }, "start");
+  const why = { heading: head(input.headings.why), zone, badge, reason };
+  const journey2 = input.journey ? layoutJourney(input.journey, head(input.headings.journey), W, m, narrow) : null;
+  const iHeading = head(input.headings.inside);
+  const title = block(input.insideTitle, m.M, bottom(iHeading) + (narrow ? 18 : 30), rowW, { size: m.insideTitle, mono: true, bold: true }, "start");
+  const numR = narrow ? 12 : 15;
+  const labelX = m.M + (narrow ? 34 : 52);
+  const labelW = narrow ? W - m.M - labelX : 520;
+  const stepSize = fitOrFail(input.steps.map((s) => ({ text: s.label, field: s.field })), labelW, m.stepSizes, 2, { bold: true }, "in its step");
+  const sst = { size: stepSize, bold: true };
+  const chipX = narrow ? labelX : labelX + labelW + 24;
+  const chipMaxText = W - m.M - chipX - 20;
+  let y = bottom(title) + (narrow ? 20 : 28);
+  const pad = narrow ? 8 : 10;
+  const rows = input.steps.map((s) => {
+    const label3 = block(s.label, labelX, y + pad, labelW, sst, "start");
+    const chipTop = narrow ? bottom(label3) + 6 : y + pad;
+    const chip = pill(s.ref, chipX, chipTop, chipMaxText, chipSt, 10, 4, [chipX, W - m.M]);
+    chip.rect.x = chipX;
+    chip.text.x = chipX + 10;
+    const h = (narrow ? bottom(chip.rect) - y : Math.max(label3.h, chip.rect.h)) + pad * (narrow ? 1 : 2);
+    const rect2 = { x: m.M, y, w: rowW, h };
+    y += h + (narrow ? 10 : 12);
+    const cy = narrow ? label3.y + label3.lh / 2 : rect2.y + h / 2;
+    return { rect: rect2, num: { cx: m.M + numR + 2, cy, r: numR, size: narrow ? 12 : 14 }, label: label3, chip };
+  });
+  const inside = { heading: iHeading, title, rows };
+  const oHeading = head(input.headings.outro);
+  const outTop = journey2 ? Math.max(...journey2.boxes.map((b) => bottom(b.rect)), journey2.outcome ? bottom(journey2.outcome.rect) : 0) + (narrow ? 28 : 40) : bottom(oHeading) + (narrow ? 40 : 96);
+  let gotcha = null;
+  let closingTop = outTop;
+  if (input.gotcha) {
+    const cardW = Math.min(760, rowW);
+    const cx0 = (W - cardW) / 2;
+    const inner = cardW - 40;
+    const t = block(input.gotcha.title, cx0 + 20, outTop + 16, inner, { size: narrow ? 13 : 14, bold: true }, "start");
+    const gSize = fitOrFail([{ text: input.gotcha.label, field: input.gotcha.field }], inner, m.gotchaSizes, 2, {}, "in the watch-out note");
+    const label3 = block(input.gotcha.label, cx0 + 20, bottom(t) + 6, inner, { size: gSize }, "start");
+    const chip = pill(input.gotcha.ref, cx0 + 20, bottom(label3) + 10, inner - 20, chipSt, 10, 4, [cx0 + 20, cx0 + cardW - 20]);
+    chip.rect.x = cx0 + 20;
+    chip.text.x = cx0 + 30;
+    const rect2 = { x: cx0, y: outTop, w: cardW, h: bottom(chip.rect) + 16 - outTop };
+    gotcha = { rect: rect2, title: t, label: label3, chip };
+    closingTop = bottom(rect2) + (narrow ? 24 : 36);
+  }
+  const closing = block(input.closing, m.M, closingTop, rowW, { size: m.closing, bold: true }, "middle");
+  const outro = { heading: oHeading, gotcha, closing };
+  const margin = narrow ? 28 : 40;
+  const fit = (y2) => Math.ceil(y2 + margin);
+  const heights = {
+    why: fit(bottom(reason)),
+    journey: journey2 ? fit(bottom(journey2.roleRef.rect)) : 0,
+    inside: fit(Math.max(...rows.map((r) => bottom(r.rect)))),
+    outro: fit(bottom(closing))
+  };
+  const height = Math.max(heights.why, heights.journey, heights.inside, heights.outro);
+  return { width: W, height, heights, why, journey: journey2, inside, outro };
+}
+function layoutVisual(input, width) {
+  return layoutAt(input, width);
+}
+function fitError(input) {
+  try {
+    layoutAt(input, WIDE);
+    layoutAt(input, NARROW);
+    return null;
+  } catch (e) {
+    if (e instanceof FitError) return e;
+    throw e;
+  }
+}
+
+// src/visual-template.ts
+var PLAYER_JS = String.raw`(function () {
+  var doc = document;
+  doc.documentElement.classList.remove('no-js');
+  var data = JSON.parse(doc.getElementById('umap-data').textContent);
+  var scenes = data.scenes, n = scenes.length, Z = data.zoom, journey = !!data.dot;
+  var reduce = !!(window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches);
+  // A page opened in a background tab waits, fully drawn, and starts when it is first shown.
+  var waiting = !reduce && !!doc.hidden;
+  var idx = 0, t = 0, playing = !reduce && !waiting, speed = 1, last = null, hold = 0, shownIdx = -1, prevScene = null;
+  var $ = function (id) { return doc.getElementById(id); };
+  var label = $('scene'), playBtn = $('play'), speedBtn = $('speed');
+  var caps = [].slice.call(doc.querySelectorAll('.captions > li'));
+  var svgs = [].slice.call(doc.querySelectorAll('svg.v')).map(function (s) {
+    var layers = {};
+    [].forEach.call(s.querySelectorAll('.layer'), function (l) { layers[l.getAttribute('data-layer')] = l; });
+    var els = [].slice.call(s.querySelectorAll('.el')).map(function (e) {
+      var lit = e.getAttribute('data-lit');
+      return { e: e, layer: e.parentNode.getAttribute('data-layer'), a: +e.getAttribute('data-a'), homeOnly: e.classList.contains('home-only'),
+        lit: lit ? lit.split(' ').map(Number) : null, keep: e.hasAttribute('data-keep-lit') };
+    });
+    var key = s.classList.contains('v-w') ? 'w' : 'n';
+    return { s: s, layers: layers, els: els, cam: data.cam[key], dot: s.querySelector('.dot'), pts: journey ? data.dot[key] : null };
+  });
+  function ease(x) { x = x < 0 ? 0 : x > 1 ? 1 : x; return x < 0.5 ? 2 * x * x : 1 - Math.pow(-2 * x + 2, 2) / 2; }
+  function mix(a, b, k) { return a.map(function (v, i) { return v + (b[i] - v) * k; }); }
+  function dotAt(arrows) {
+    var h = data.dot.hops;
+    for (var k = 0; k < h.length; k++) {
+      if (t >= h[k][0] && t < h[k][1]) {
+        var a = arrows[k], e = ease((t - h[k][0]) / (h[k][1] - h[k][0]));
+        return [a[0] + (a[2] - a[0]) * e, a[1] + (a[3] - a[1]) * e];
+      }
+    }
+    return null;
+  }
+  function render() {
+    var sc = scenes[idx].id, changed = sc !== prevScene;
+    prevScene = sc;
+    var vis = { why: sc === 'why', journey: sc === 'journey' || sc === 'outro' || (sc === 'inside' && journey && t < Z),
+      inside: sc === 'inside' && (!journey || t >= Z), outro: sc === 'outro' };
+    svgs.forEach(function (v) {
+      for (var k in v.layers) {
+        var l = v.layers[k], on = !!vis[k];
+        // On a scene change the outgoing layer goes at once (no fade), so the camera never shows it mid-zoom.
+        if (changed && !on && l.classList.contains('show')) {
+          l.classList.add('cut');
+          l.classList.remove('show');
+          getComputedStyle(l).opacity;
+          l.classList.remove('cut');
+        } else l.classList.toggle('show', on);
+      }
+      v.els.forEach(function (x) {
+        var home = x.layer === sc;
+        var on = !!vis[x.layer] && (home ? t >= x.a : !x.homeOnly);
+        x.e.classList.toggle('on', on);
+        if (x.lit) x.e.classList.toggle('lit', on && (home ? t >= x.lit[0] && t < x.lit[1] : x.keep));
+      });
+      var c = v.cam, box = [0, 0, c.w, c.h[sc]];
+      if (journey && sc === 'inside' && t < Z) box = mix(box, c.zin, ease(t / Z));
+      if (journey && sc === 'outro' && t < Z) box = mix(c.zout, box, ease(t / Z));
+      v.s.setAttribute('viewBox', box.join(' '));
+      if (v.dot) {
+        var p = sc === 'journey' ? dotAt(v.pts) : null;
+        if (p) { v.dot.setAttribute('cx', p[0]); v.dot.setAttribute('cy', p[1]); }
+        v.dot.classList.toggle('on', !!p);
+      }
+    });
+    if (shownIdx !== idx) {
+      shownIdx = idx;
+      label.textContent = 'Scene ' + (idx + 1) + ' of ' + n + ': ' + scenes[idx].title.replace(/^\d+ · /, '');
+      caps.forEach(function (c, i) { c.classList.toggle('current', i === idx); });
+    }
+  }
+  // Without a running clock (paused, reduced motion) a scene is shown complete; while playing it starts from 0.
+  function go(i) { idx = (i + n) % n; t = playing ? 0 : scenes[idx].duration; hold = 0; render(); }
+  function setPlaying(p) {
+    playing = p && !reduce;
+    if (playing && t >= scenes[idx].duration) { t = 0; hold = 0; render(); }
+    playBtn.textContent = playing ? 'Pause' : 'Play';
+    playBtn.setAttribute('aria-pressed', String(playing));
+  }
+  function tick(now) {
+    if (playing && last !== null) {
+      t += Math.min(0.1, (now - last) / 1000) * speed;
+      if (t >= scenes[idx].duration) {
+        if (idx < n - 1) { idx++; t = 0; }
+        else { hold += t - scenes[idx].duration; t = scenes[idx].duration; if (hold > 3) { idx = 0; t = 0; hold = 0; } }
+      }
+      render();
+    }
+    last = now;
+    requestAnimationFrame(tick);
+  }
+  $('restart').addEventListener('click', function () { go(0); });
+  $('prev').addEventListener('click', function () { go(idx - 1); });
+  $('next').addEventListener('click', function () { go(idx + 1); });
+  playBtn.addEventListener('click', function () { waiting = false; setPlaying(!playing); });
+  speedBtn.addEventListener('click', function () {
+    speed = speed === 1 ? 1.5 : 1;
+    speedBtn.textContent = speed === 1 ? '1×' : '1.5×';
+    speedBtn.setAttribute('aria-label', 'Speed ' + speedBtn.textContent);
+  });
+  doc.addEventListener('keydown', function (e) {
+    if (e.key === 'ArrowRight') go(idx + 1);
+    else if (e.key === 'ArrowLeft') go(idx - 1);
+    else if ((e.key === ' ' || e.key === 'k') && !(e.target && e.target.tagName === 'BUTTON')) { e.preventDefault(); waiting = false; setPlaying(!playing); }
+  });
+  doc.addEventListener('visibilitychange', function () {
+    if (waiting && !doc.hidden) { waiting = false; idx = 0; t = 0; setPlaying(true); render(); }
+  });
+  if (reduce) doc.documentElement.classList.add('reduced');
+  setPlaying(playing);
+  go(0);
+  requestAnimationFrame(tick);
+})();`;
+var VISUAL_TEMPLATE = String.raw`<!doctype html>
+<html lang="en" class="no-js">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>__TITLE__</title>
+<style>
+${THEME_CSS}* { box-sizing: border-box; }
+html { background: var(--bg); }
+body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.5 var(--font); }
+main { max-width: 1320px; margin: 0 auto; padding: 16px; }
+h1 { font: 700 1.3rem/1.3 var(--mono); margin: 0 0 4px; word-break: break-all; }
+h2 { font-size: 1.05rem; margin: 24px 0 8px; }
+.meta, .note { color: var(--muted); font-size: 0.88rem; margin: 2px 0; }
+.stage { margin-top: 12px; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
+.v { display: block; width: 100%; height: auto; }
+.v-n { display: none; max-width: 480px; margin: 0 auto; }
+@media (max-width: 760px) {
+  main { padding: 12px 0; }
+  header, h2, .captions, .note, .controls { padding-left: 12px; padding-right: 12px; }
+  .stage { border-radius: 0; border-left: 0; border-right: 0; }
+  .v-w { display: none; }
+  .v-n { display: block; }
+}
+.no-js .stage, .no-js .controls { display: none; }
+.controls { position: sticky; bottom: 0; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; padding: 10px 0; background: var(--bg); }
+button { font: inherit; background: var(--accent); color: var(--bg); border: 0; border-radius: 6px; padding: 5px 12px; cursor: pointer; min-width: 44px; min-height: 32px; }
+button:focus-visible { outline: 3px solid var(--text); outline-offset: 2px; }
+#scene { color: var(--muted); font-size: 0.9rem; }
+.reduced #play, .reduced #speed { display: none; }
+.captions { padding-left: 20px; }
+.captions > li { margin: 6px 0 12px; padding: 4px 8px; border-left: 3px solid transparent; }
+.captions > li.current { border-left-color: var(--accent); }
+.captions h3 { font-size: 0.95rem; margin: 0 0 2px; }
+.captions p { margin: 2px 0; }
+.captions ol { margin: 2px 0; padding-left: 20px; }
+code { font-family: var(--mono); font-size: 0.88em; background: var(--surface); border: 1px solid var(--border); border-radius: 4px; padding: 0 4px; word-break: break-all; }
+/* Stage drawing */
+.st-owned { --st: var(--owned); --on-st: var(--on-owned); }
+.st-fragile { --st: var(--fragile); --on-st: var(--on-fragile); }
+.st-fading { --st: var(--fading); --on-st: var(--on-fading); }
+.st-dark { --st: var(--dark); --on-st: var(--on-dark); }
+.st-unknown { --st: var(--unknown); --on-st: var(--on-unknown); }
+.stage-bg { fill: var(--surface); }
+.layer { opacity: 0; transition: opacity .35s ease; }
+.layer.cut { transition: none; }
+.layer.show { opacity: 1; }
+.el { opacity: 0; transition: opacity .45s ease, transform .45s ease; }
+.el.on { opacity: 1; }
+.row { transform: translateX(-10px); }
+.row.on { transform: none; }
+text { fill: var(--text); font-family: var(--font); }
+.mono { font-family: var(--mono); }
+.b, .strong { font-weight: 700; }
+.h { fill: var(--muted); }
+.badge-bg { fill: var(--st); }
+.badge-t { fill: var(--on-st); }
+.box-bg { fill: var(--bg); stroke: var(--border); stroke-width: 1.5; }
+.box-t { fill: var(--text); }
+.box.lit .box-bg { stroke: var(--accent); stroke-width: 2.5; }
+.box.tgt .box-bg { fill: var(--st); stroke: var(--st); }
+.box.tgt .box-t { fill: var(--on-st); }
+.box.tgt.lit .box-bg { stroke: var(--accent); stroke-width: 3; filter: drop-shadow(0 0 10px var(--accent)); }
+.pill-bg { fill: color-mix(in srgb, var(--accent) 12%, var(--surface)); stroke: var(--accent); stroke-width: 1.5; }
+.end.lit .pill-bg { fill: color-mix(in srgb, var(--accent) 28%, var(--surface)); stroke-width: 2.5; }
+.arrow { stroke: var(--muted); stroke-width: 2; }
+.ah { fill: var(--muted); }
+.link { stroke: var(--accent); stroke-width: 1.5; stroke-dasharray: 4 4; }
+.dot { fill: var(--accent); stroke: var(--surface); stroke-width: 2; opacity: 0; transition: opacity .15s; }
+.dot.on { opacity: 1; }
+.chip-bg { fill: var(--bg); stroke: var(--border); }
+.chip-t { fill: var(--muted); }
+.inside-bg { fill: color-mix(in srgb, var(--st) 9%, var(--surface)); }
+.row-bg { fill: var(--surface); stroke: var(--border); }
+.row.lit .row-bg { fill: color-mix(in srgb, var(--accent) 10%, var(--surface)); stroke: var(--accent); stroke-width: 2; }
+.num-bg { fill: var(--border); }
+.row.lit .num-bg { fill: var(--accent); }
+.row.lit .num-t { fill: var(--surface); }
+.gotcha-bg { fill: color-mix(in srgb, var(--fragile) 14%, var(--surface)); stroke: var(--fragile); stroke-width: 2; }
+.closing { fill: var(--accent); }
+@media (prefers-reduced-motion: reduce) {
+  .layer, .el, .dot { transition: none !important; }
+  .row { transform: none; }
+}
+</style>
+</head>
+<body>
+<main>
+<header>
+<h1>__ZONE__</h1>
+<p class="meta">__META__</p>
+</header>
+<div class="stage" id="stage">__STAGE__</div>
+<div class="controls" role="toolbar" aria-label="Animation controls">
+<button type="button" id="restart">Restart</button>
+<button type="button" id="prev" aria-label="Previous scene">Prev</button>
+<button type="button" id="play" aria-pressed="true">Pause</button>
+<button type="button" id="next" aria-label="Next scene">Next</button>
+<button type="button" id="speed" aria-label="Speed 1×">1×</button>
+<span id="scene" aria-live="polite"></span>
+</div>
+<h2>Scenes</h2>
+__CAPTIONS__
+<p class="note">Watching doesn't change the Understanding Map. To lock it in, run <code>__LEARN__</code>.</p>
+</main>
+<script type="application/json" id="umap-data">__DATA__</script>
+<script>
+${PLAYER_JS}
+</script>
+</body>
+</html>
+`;
+
+// src/visual.ts
+var TITLES = { why: "Why this matters", journey: "Product journey", inside: "Inside the zone", outro: "Back out" };
+var STATES2 = ["owned", "fragile", "fading", "dark", "unknown"];
+var learnCommand = (zoneId) => `/understanding-map:learn ${zoneId}`;
+var cap = (s) => s[0].toUpperCase() + s.slice(1);
+var plural2 = (n, one, many) => `${n} ${n === 1 ? one : many}`;
+function reasonLine(z) {
+  const rest = z.reason.replace(new RegExp(`^${cap(z.state)}(\\s*\xB7\\s*)?`), "").trim();
+  return rest || (z.fanIn > 0 ? `${plural2(z.fanIn, "file imports", "files import")} it` : "No other files import it");
+}
+function sceneIds(sb) {
+  return sb.journey ? ["why", "journey", "inside", "outro"] : ["why", "inside", "outro"];
+}
+function layoutInputFor(sb, z) {
+  const ids = sceneIds(sb);
+  const heading = (id) => `${ids.indexOf(id) + 1} \xB7 ${TITLES[id]}`;
+  const t = sb.journey ? sb.journey.findIndex((s) => s.target) : -1;
+  return {
+    headings: { why: heading("why"), journey: sb.journey ? heading("journey") : "", inside: heading("inside"), outro: heading("outro") },
+    zoneId: z.id,
+    stateLabel: cap(z.state),
+    reason: reasonLine(z),
+    journey: sb.journey && {
+      start: sb.trigger ? { label: sb.trigger.label, field: "trigger.label" } : { label: "Called by", field: "trigger" },
+      stops: sb.journey.map((s, i) => ({ label: s.label, field: `journey[${i}].label`, target: s.target })),
+      outcome: sb.outcome && { label: sb.outcome.label, field: "outcome.label" },
+      role: { text: sb.journey[t].role ?? "", field: `journey[${t}].role` },
+      roleRef: sb.journey[t].ref
+    },
+    insideTitle: `Inside ${z.id}`,
+    steps: sb.steps.map((s, i) => ({ label: s.label, ref: s.ref, field: `steps[${i}].label` })),
+    gotcha: sb.gotcha && { title: "Watch out", label: sb.gotcha.label, ref: sb.gotcha.ref, field: "gotcha.label" },
+    closing: `Lock it in: ${learnCommand(z.id)}`
+  };
+}
+function checkStoryboard(raw, ctx) {
+  const sb = validateStoryboard(raw, ctx);
+  const fit = fitError(layoutInputFor(sb, { id: ctx.zone, state: "unknown", reason: "", fanIn: 0 }));
+  if (fit) throw new StoryboardError(fit.field, fit.message.slice(fit.field.length + 2));
+  return sb;
+}
+var ZOOM = 1.2;
+var HOP = 1.6;
+var PAUSE = 0.8;
+var TARGET_HOLD = 3;
+var WHY = 10;
+var OUTRO = 10;
+var JOURNEY_MIN2 = 20;
+var INSIDE_TARGET = 29;
+function timeline(sb) {
+  const why = { zone: 0.3, badge: 1.2, reason: 2.2 };
+  let journey2 = null;
+  let journeyDur = 0;
+  if (sb.journey) {
+    const n = sb.journey.length;
+    const boxes = sb.journey.map((_, i) => 0.8 + 0.3 * i);
+    const outcome = 0.8 + 0.3 * n;
+    const arrows = n + (sb.outcome ? 1 : 0);
+    const targetIndex = sb.journey.findIndex((s) => s.target);
+    const hops = [];
+    let t = outcome + 0.8;
+    let reach = 0;
+    for (let k = 0; k < arrows; k++) {
+      hops.push([t, t + HOP]);
+      t += HOP;
+      if (k === targetIndex) reach = t;
+      t += k === targetIndex ? TARGET_HOLD : PAUSE;
+    }
+    const visits = boxes.map((_, k) => [hops[k][1], k + 1 < arrows ? hops[k + 1][0] : 1e9]);
+    journey2 = { start: 0.3, boxes, outcome, hops, visits, reach, role: reach + 0.3 };
+    journeyDur = Math.max(JOURNEY_MIN2, Math.round((t + 3) * 10) / 10);
+  }
+  const step = Math.min(7, Math.max(4, (INSIDE_TARGET - 4.6) / sb.steps.length));
+  const steps = sb.steps.map((_, i) => [1.6 + i * step, i === sb.steps.length - 1 ? 1e9 : 1.6 + (i + 1) * step]);
+  const insideDur = Math.round((1.6 + sb.steps.length * step + 3) * 10) / 10;
+  const outro = { gotcha: 1.4, closing: sb.gotcha ? 3.4 : 1.6 };
+  const durations = { why: WHY, journey: journeyDur, inside: insideDur, outro: OUTRO };
+  const ids = sceneIds(sb);
+  return {
+    scenes: ids.map((id, i) => ({ id, title: `${i + 1} \xB7 ${TITLES[id]}`, duration: durations[id] })),
+    why,
+    journey: journey2,
+    steps,
+    outro
+  };
+}
+var n2 = (v) => String(Math.round(v * 100) / 100);
+var attrs = (a) => Object.entries(a).flatMap(([k, v]) => v === void 0 ? [] : [` ${k}="${esc(typeof v === "number" ? n2(v) : v)}"`]).join("");
+function text2(b, cls, extra = {}) {
+  const x = b.align === "middle" ? b.x + b.w / 2 : b.x;
+  const spans = b.lines.map((l, i) => `<tspan${attrs({ x, y: b.y + i * b.lh + b.lh / 2 + b.size * 0.35 })}>${esc(l)}</tspan>`).join("");
+  const classes = [cls, b.mono ? "mono" : "", b.bold ? "b" : ""].filter(Boolean).join(" ");
+  return `<text${attrs({ class: classes, "font-size": b.size, "text-anchor": b.align === "middle" ? "middle" : "start", ...extra })}>${spans}</text>`;
+}
+var rect = (r, cls, rx = 8) => `<rect${attrs({ class: cls, x: r.x, y: r.y, width: r.w, height: r.h, rx })}/>`;
+var pillSvg = (p, cls) => rect(p.rect, `${cls}-bg`, Math.min(p.rect.h / 2, 18)) + text2(p.text, `${cls}-t`);
+var line = (a, b, cls, marker) => `<line${attrs({ class: cls, x1: a.x, y1: a.y, x2: b.x, y2: b.y, "marker-end": marker ? `url(#${marker})` : void 0 })}/>`;
+var g = (body, a, cls = "", extra = {}) => `<g${attrs({ class: `el ${cls}`.trim(), "data-a": a, ...extra })}>${body}</g>`;
+function svg(l, tl, state, variant) {
+  const marker = `ah-${variant}`;
+  const parts = [];
+  parts.push(`<defs><marker id="${marker}" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="ah" d="M0,0 L10,5 L0,10 z"/></marker></defs>`);
+  parts.push(`<rect class="stage-bg" x="0" y="0" width="${l.width}" height="${l.height}"/>`);
+  const w = l.why;
+  parts.push(`<g class="layer" data-layer="why">` + g(text2(w.heading, "h"), 0) + g(text2(w.zone, "zone"), tl.why.zone) + g(rect(w.badge.rect, `badge-bg st-${state}`, 6) + text2(w.badge.text, `badge-t st-${state}`), tl.why.badge) + g(text2(w.reason, "body"), tl.why.reason) + `</g>`);
+  const j = l.journey;
+  if (j && tl.journey) {
+    const t = tl.journey;
+    const items = [g(text2(j.heading, "h"), 0, "home-only")];
+    items.push(g(pillSvg(j.start, "pill"), t.start));
+    items.push(g(line(j.arrows[0][0], j.arrows[0][1], "arrow", marker), t.boxes[0]));
+    j.boxes.forEach((b, i) => {
+      if (i > 0) items.push(g(line(j.arrows[i][0], j.arrows[i][1], "arrow", marker), t.boxes[i]));
+      const cls = b.target ? `box tgt st-${state}` : "box";
+      const lit = b.target ? { "data-lit": `${n2(t.reach)} 1e9`, "data-keep-lit": "1" } : { "data-lit": `${n2(t.visits[i][0])} ${n2(t.visits[i][1])}` };
+      items.push(g(rect(b.rect, "box-bg") + text2(b.label, "box-t"), t.boxes[i], cls, lit));
+    });
+    if (j.outcome) {
+      items.push(g(pillSvg(j.outcome, "pill"), t.outcome, "end", { "data-lit": `${n2(t.hops[t.hops.length - 1][1])} 1e9`, "data-keep-lit": "1" }));
+      items.push(g(line(j.arrows[j.arrows.length - 1][0], j.arrows[j.arrows.length - 1][1], "arrow", marker), t.outcome));
+    }
+    if (j.roleLink) items.push(g(line(j.roleLink[0], j.roleLink[1], "link"), t.role, "home-only"));
+    items.push(g(text2(j.role, "role"), t.role, "home-only"));
+    items.push(g(pillSvg(j.roleRef, "chip"), t.role + 0.4, "home-only"));
+    items.push(`<circle class="dot" r="${variant === "w" ? 8 : 6}" cx="${n2(j.arrows[0][0].x)}" cy="${n2(j.arrows[0][0].y)}"/>`);
+    parts.push(`<g class="layer" data-layer="journey">${items.join("")}</g>`);
+  }
+  const ins = l.inside;
+  const rows = ins.rows.map((r, i) => {
+    const [a, b] = tl.steps[i];
+    return g(rect(r.rect, "row-bg") + `<circle class="num-bg"${attrs({ cx: r.num.cx, cy: r.num.cy, r: r.num.r })}/><text${attrs({ class: "num-t b", x: r.num.cx, y: r.num.cy + r.num.size * 0.35, "font-size": r.num.size, "text-anchor": "middle" })}>${i + 1}</text>` + text2(r.label, "row-t") + pillSvg(r.chip, "chip"), a, "row", { "data-lit": `${n2(a)} ${n2(b)}` });
+  }).join("");
+  parts.push(`<g class="layer" data-layer="inside"><rect class="inside-bg st-${state}" x="0" y="0" width="${l.width}" height="${l.height}"/>` + g(text2(ins.heading, "h"), 0) + g(text2(ins.title, "zone small"), 0.9) + rows + `</g>`);
+  const o = l.outro;
+  const gotcha = o.gotcha ? g(rect(o.gotcha.rect, "gotcha-bg") + text2(o.gotcha.title, "gotcha-h") + text2(o.gotcha.label, "gotcha-t") + pillSvg(o.gotcha.chip, "chip"), tl.outro.gotcha) : "";
+  parts.push(`<g class="layer" data-layer="outro">` + g(text2(o.heading, "h"), 0) + gotcha + g(text2(o.closing, "closing"), tl.outro.closing) + `</g>`);
+  return `<svg class="v v-${variant}" viewBox="0 0 ${l.width} ${l.heights.why}" preserveAspectRatio="xMidYMid meet" aria-hidden="true" focusable="false">${parts.join("")}</svg>`;
+}
+function fitAspect(r, width, height, pad = 24) {
+  let [x, y, w, h] = [r.x - pad, r.y - pad, r.w + 2 * pad, r.h + 2 * pad];
+  const aspect = width / height;
+  if (w / h < aspect) {
+    const nw = h * aspect;
+    x -= (nw - w) / 2;
+    w = nw;
+  } else {
+    const nh = w / aspect;
+    y -= (nh - h) / 2;
+    h = nh;
+  }
+  return [x, y, w, h].map((v) => Math.round(v * 100) / 100);
+}
+function camera(l) {
+  const t = l.journey?.target;
+  return {
+    w: l.width,
+    h: { ...l.heights, journey: l.heights.journey || l.heights.why },
+    zin: t ? fitAspect(t, l.width, l.heights.inside) : null,
+    zout: t ? fitAspect(t, l.width, l.heights.outro) : null
+  };
+}
+function captions(sb, z, input, tl) {
+  const ref2 = (r) => `<code>${esc(r)}</code>`;
+  const items = [];
+  for (const s of tl.scenes) {
+    let body = "";
+    if (s.id === "why") {
+      body = `<p><code>${esc(z.id)}</code> is <strong>${esc(cap(z.state))}</strong>. ${esc(input.reason)}.</p>`;
+    } else if (s.id === "journey" && sb.journey) {
+      const stops = sb.journey.map((j) => (j.target ? `<strong>${esc(j.label)}</strong>` : esc(j.label)) + ` (${ref2(j.ref)})`);
+      const start = sb.trigger ? `${esc(sb.trigger.label)} (${ref2(sb.trigger.ref)})` : "Called by";
+      const chain = [start, ...stops, ...sb.outcome ? [esc(sb.outcome.label)] : []].join(" \u2192 ");
+      const target = sb.journey.find((j) => j.target);
+      body = `<p>${chain}</p><p>${esc(target.label)}: ${esc(target.role ?? "")}.</p>`;
+    } else if (s.id === "inside") {
+      body = `<ol>${sb.steps.map((st) => `<li>${esc(st.label)} ${ref2(st.ref)}</li>`).join("")}</ol>`;
+    } else if (s.id === "outro") {
+      body = (sb.gotcha ? `<p>Watch out: ${esc(sb.gotcha.label)} ${ref2(sb.gotcha.ref)}</p>` : "") + `<p>Lock it in: <code>${esc(learnCommand(z.id))}</code></p>`;
+    }
+    items.push(`<li><h3>${esc(s.title)}</h3>${body}</li>`);
+  }
+  return `<ol class="captions">${items.join("")}</ol>`;
+}
+function renderVisual(sb, z, generatedAt) {
+  const state = STATES2.includes(z.state) ? z.state : "unknown";
+  const live = { ...z, state };
+  const input = layoutInputFor(sb, live);
+  const tl = timeline(sb);
+  const wide = layoutVisual(input, WIDE);
+  const narrow = layoutVisual(input, NARROW);
+  const data = {
+    version: 1,
+    zone: z.id,
+    zoom: ZOOM,
+    scenes: tl.scenes,
+    dot: tl.journey ? {
+      hops: tl.journey.hops,
+      w: wide.journey.arrows.map(([a, b]) => [a.x, a.y, b.x, b.y].map((v) => Math.round(v * 10) / 10)),
+      n: narrow.journey.arrows.map(([a, b]) => [a.x, a.y, b.x, b.y].map((v) => Math.round(v * 10) / 10))
+    } : null,
+    cam: { w: camera(wide), n: camera(narrow) },
+    storyboard: sb
+  };
+  const fill = {
+    __TITLE__: esc(`${z.id} \xB7 Understanding Map`),
+    __ZONE__: esc(z.id),
+    __META__: esc(`Animation of one zone, drawn from a storyboard checked against the code \xB7 generated ${generatedAt}`),
+    __STAGE__: svg(wide, tl, state, "w") + svg(narrow, tl, state, "n"),
+    __CAPTIONS__: captions(sb, live, input, tl),
+    __LEARN__: esc(learnCommand(z.id)),
+    __DATA__: safeJson(data)
+  };
+  const html = VISUAL_TEMPLATE.replace(/__(TITLE|ZONE|META|STAGE|CAPTIONS|LEARN|DATA)__/g, (k) => fill[k]);
+  return { html, scenes: tl.scenes.map((s) => s.id) };
+}
+
+// src/visual-cache.ts
+import { readdirSync as readdirSync3 } from "node:fs";
+
+// src/visual-store.ts
+import { createHash as createHash2 } from "node:crypto";
+import { mkdirSync as mkdirSync10, readFileSync as readFileSync13, writeFileSync as writeFileSync10 } from "node:fs";
+import { join as join15 } from "node:path";
+function visualSlug(zoneId) {
+  const base = zoneId.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "") || "zone";
+  return `${base}-${createHash2("sha1").update(zoneId).digest("hex").slice(0, 6)}`;
+}
+var visualsDir = (root) => join15(umDir(root), "local", "visuals");
+var visualHref = (zoneId) => `local/visuals/${visualSlug(zoneId)}.html`;
+var MISSING = "missing";
+function hashFile(root, path) {
+  try {
+    return createHash2("sha1").update(readFileSync13(join15(root, path))).digest("hex").slice(0, 12);
+  } catch {
+    return MISSING;
+  }
+}
+function visualFingerprint(root, zoneFiles, storyboard) {
+  const paths = [.../* @__PURE__ */ new Set([...zoneFiles, ...refFiles(storyboard)])].sort();
+  return Object.fromEntries(paths.map((p) => [p, hashFile(root, p)]));
+}
+function saveVisual(root, saved, html) {
+  const dir = visualsDir(root);
+  mkdirSync10(dir, { recursive: true });
+  const base = join15(dir, visualSlug(saved.zone));
+  writeFileSync10(`${base}.html`, html);
+  writeFileSync10(`${base}.json`, JSON.stringify(saved, null, 2) + "\n");
+  return { html: `${base}.html`, json: `${base}.json` };
+}
+var isObj4 = (v) => typeof v === "object" && v !== null && !Array.isArray(v);
+function readSavedVisual(root, zoneId) {
+  try {
+    const v = JSON.parse(readFileSync13(join15(visualsDir(root), `${visualSlug(zoneId)}.json`), "utf8"));
+    if (!isObj4(v) || v.zone !== zoneId || typeof v.date !== "string" || !isObj4(v.fingerprint) || !isObj4(v.storyboard)) return null;
+    if (!Array.isArray(v.storyboard.steps)) return null;
+    return v;
+  } catch {
+    return null;
+  }
+}
+function checkFresh(root, zone, saved) {
+  let current;
+  try {
+    current = visualFingerprint(root, zone.files, saved.storyboard);
+  } catch {
+    return { fresh: false, reason: "the saved storyboard could not be read" };
+  }
+  const keys = /* @__PURE__ */ new Set([...Object.keys(current), ...Object.keys(saved.fingerprint)]);
+  const changed = [...keys].filter((k) => current[k] !== saved.fingerprint[k] || current[k] === MISSING).sort();
+  return changed.length ? { fresh: false, reason: `the code changed since the last visual (${changed.slice(0, 3).join(", ")}${changed.length > 3 ? ", \u2026" : ""})` } : { fresh: true };
+}
+
+// src/visual-cache.ts
+var liveZone = (z) => ({ id: z.zone.id, state: z.state, reason: z.reason, fanIn: z.criticality.fanIn });
+function storyboardContextFor(root, m, zoneId) {
+  return {
+    zone: zoneId,
+    zones: Object.fromEntries(m.zones.map((z) => [z.zone.id, z.zone.files])),
+    lineCount: mapLineCounter(root, m.zones.flatMap((z) => z.zone.files)),
+    people: [...new Set(m.zones.flatMap((z) => z.people.map((p) => p.handle)))]
+  };
+}
+function reusableVisual(root, m, z) {
+  const saved = readSavedVisual(root, z.zone.id);
+  if (!saved) return { reason: "no saved animation for this zone yet" };
+  const fresh = checkFresh(root, { id: z.zone.id, files: z.zone.files }, saved);
+  if (!fresh.fresh) return { reason: fresh.reason };
+  try {
+    checkStoryboard(saved.storyboard, storyboardContextFor(root, m, z.zone.id));
+  } catch {
+    return { reason: "the saved storyboard no longer matches the map" };
+  }
+  return { saved };
+}
+function rerender(root, z, saved, date) {
+  const r = renderVisual(saved.storyboard, liveZone(z), date);
+  return { path: saveVisual(root, saved, r.html).html, scenes: r.scenes };
+}
+function refreshVisuals(root, m, date) {
+  let saved;
+  try {
+    saved = new Set(readdirSync3(visualsDir(root)));
+  } catch {
+    return {};
+  }
+  const out2 = {};
+  for (const z of m.zones) {
+    if (!saved.has(`${visualSlug(z.zone.id)}.json`)) continue;
+    try {
+      const r = reusableVisual(root, m, z);
+      if (!("saved" in r)) continue;
+      rerender(root, z, r.saved, date);
+      out2[z.zone.id] = visualHref(z.zone.id);
+    } catch {
+    }
+  }
+  return out2;
 }
 
 // src/terminal.ts
@@ -4142,13 +5327,7 @@ function guarded(body) {
 function findZone(m, root, target) {
   const byId = m.zones.find((z) => z.zone.id === target);
   if (byId) return byId;
-  let cwd = process.cwd();
-  try {
-    cwd = realpathSync2(cwd);
-  } catch {
-  }
-  const rel = relative3(root, resolve2(cwd, target)).split("\\").join("/");
-  const path = rel === "" ? target : rel.replace(/^\.\//, "");
+  const path = targetPath(root, target);
   const file = m.zones.find((z) => z.zone.files.includes(path));
   if (file) return file;
   const dir = path.replace(/\/+$/, "") + "/";
@@ -4165,16 +5344,16 @@ function optionalReviews(root, config, deps = { ghAvailable }) {
     return {};
   }
 }
-var cap = (s) => s.charAt(0).toUpperCase() + s.slice(1);
+var cap2 = (s) => s.charAt(0).toUpperCase() + s.slice(1);
 var GRADES = ["pass", "partial", "miss"];
 var valueOf = (args, flag) => {
   const i = args.indexOf(flag);
   return i >= 0 ? args[i + 1] : void 0;
 };
 async function readStdin() {
-  let text = "";
-  for await (const chunk2 of process.stdin) text += String(chunk2);
-  return text;
+  let text3 = "";
+  for await (const chunk2 of process.stdin) text3 += String(chunk2);
+  return text3;
 }
 var commands = {
   /** Hook entry point: not guarded; reads stdin, never throws, always exits 0. */
@@ -4187,8 +5366,8 @@ var commands = {
       }
       if (args[0] === "post-tool-use") onPostToolUse(input);
       else if (args[0] === "stop") {
-        const text = onStop(input);
-        if (text) out(text);
+        const text3 = onStop(input);
+        if (text3) out(text3);
       }
     } catch {
     }
@@ -4211,11 +5390,11 @@ var commands = {
       err('Usage: setup --mode solo|team [--critical "<glob>,<glob>"]');
       return 2;
     }
-    const critical = args.includes("--critical") ? (valueOf2("--critical") ?? "").split(",").map((g) => g.trim()).filter(Boolean) : void 0;
+    const critical = args.includes("--critical") ? (valueOf2("--critical") ?? "").split(",").map((g2) => g2.trim()).filter(Boolean) : void 0;
     const r = runSetup(root, { mode, critical });
     const lines = [
       `Set up Understanding Map in ${mode} mode.`,
-      `Wrote ${relative3(root, r.configPath)}${r.critical.length ? ` with critical areas: ${r.critical.join(", ")}` : ""}.`,
+      `Wrote ${relative4(root, r.configPath)}${r.critical.length ? ` with critical areas: ${r.critical.join(", ")}` : ""}.`,
       mode === "solo" ? "Everything in .understanding/ stays on this machine (it is ignored by git)." : "Local data and the HTML report are ignored by git; passes and anonymous zone totals can be shared."
     ];
     if (r.gitattributesLines.length) lines.push(`Added ${r.gitattributesLines.length} merge rule(s) to .gitattributes so shared files merge cleanly.`);
@@ -4231,7 +5410,12 @@ var commands = {
     let reportPath = null;
     if (!flags.has("--no-report")) {
       try {
-        reportPath = writeReport(root, renderReport(m, config));
+        let visuals = {};
+        try {
+          visuals = refreshVisuals(root, m, (/* @__PURE__ */ new Date()).toISOString().slice(0, 10));
+        } catch {
+        }
+        reportPath = writeReport(root, renderReport(m, { ...config, visuals }));
       } catch (e) {
         err(`Could not write the HTML report: ${e.message.split("\n")[0]}`);
       }
@@ -4240,9 +5424,9 @@ var commands = {
       out(JSON.stringify(m));
       return 0;
     }
-    let text = formatSummary(m, reportPath);
-    if (!isSetUp(root)) text += "\nNot set up yet \u2014 run /understanding-map:setup to choose solo or team.";
-    out(text);
+    let text3 = formatSummary(m, reportPath);
+    if (!isSetUp(root)) text3 += "\nNot set up yet \u2014 run /understanding-map:setup to choose solo or team.";
+    out(text3);
     return 0;
   }),
   zone: guarded((root, args) => {
@@ -4277,9 +5461,9 @@ var commands = {
   }),
   record: guarded((root, args) => {
     const kind = valueOf(args, "--kind");
-    const grades = (valueOf(args, "--grades") ?? "").split(",").map((g) => g.trim()).filter(Boolean);
+    const grades = (valueOf(args, "--grades") ?? "").split(",").map((g2) => g2.trim()).filter(Boolean);
     const zones = (valueOf(args, "--zones") ?? "").split(",").map((z) => z.trim()).filter(Boolean);
-    if (kind !== "session" && kind !== "handoff" || grades.length < 1 || grades.length > 3 || !grades.every((g) => GRADES.includes(g)) || kind === "session" && zones.length === 0) {
+    if (kind !== "session" && kind !== "handoff" || grades.length < 1 || grades.length > 3 || !grades.every((g2) => GRADES.includes(g2)) || kind === "session" && zones.length === 0) {
       err("Usage: record --kind session|handoff [--zones <id,id>] --grades pass|partial|miss[,...] (1-3 grades; --zones required for session) [--json]");
       return 2;
     }
@@ -4301,7 +5485,7 @@ var commands = {
     else {
       out([
         `Result: ${r.result}`,
-        ...changes.length ? changes.map((c) => `${c.zone}: ${cap(c.before)} \u2192 ${cap(c.after)} (level ${c.levelBefore} \u2192 ${c.levelAfter})`) : ["No change on the map."]
+        ...changes.length ? changes.map((c) => `${c.zone}: ${cap2(c.before)} \u2192 ${cap2(c.after)} (level ${c.levelBefore} \u2192 ${c.levelAfter})`) : ["No change on the map."]
       ].join("\n"));
     }
     return 0;
@@ -4326,6 +5510,86 @@ var commands = {
     out("Skipped the handoff check; touched zones are flagged as unreviewed agent code.");
     return 0;
   }),
+  context: guarded((root, args) => {
+    const { flags, positional } = parseArgs(args);
+    const m = buildMap(root);
+    const p = pickZone(m, root, positional[0]);
+    if (!p.zone) {
+      if (positional[0]) {
+        err(p.why);
+        return 1;
+      }
+      out(flags.has("--json") ? JSON.stringify({ zone: null, why: p.why }) : p.why);
+      return 0;
+    }
+    const c = zoneContext(root, m, p.zone, p.picked);
+    if (flags.has("--json")) out(JSON.stringify(c));
+    else {
+      const names = (ns) => ns.length ? ns.map((n) => n.zone).join(", ") : "none";
+      out([
+        `${c.zone.id} \u2014 ${c.picked.note}`,
+        `Files: ${c.zone.files.length} \xB7 ${c.zone.loc} lines \xB7 ${c.zone.fanIn} importing file(s)`,
+        `Imported by: ${names(c.inbound)}`,
+        `Imports: ${names(c.outbound)}`,
+        `Entry hints: ${c.entryHints.length ? c.entryHints.map((h) => h.file).join(", ") : "none"}`
+      ].join("\n"));
+    }
+    return 0;
+  }),
+  visualize: guarded((root, args) => {
+    const sbFile = valueOf(args, "--storyboard");
+    const positional = args.filter((a, i) => !a.startsWith("--") && args[i - 1] !== "--storyboard");
+    const json = args.includes("--json");
+    const cached = args.includes("--cached");
+    if (!positional[0] || !cached && !sbFile) {
+      err('Usage: visualize "<zone>" --storyboard <file.json> [--json] | visualize "<zone>" --cached [--json]');
+      return 2;
+    }
+    const m = buildMap(root);
+    const p = pickZone(m, root, positional[0]);
+    if (!p.zone) {
+      err(p.why);
+      return 1;
+    }
+    const z = p.zone;
+    const rel = (path) => relative4(root, path).split("\\").join("/");
+    const ready = (path, scenes, fromCache) => {
+      if (json) out(JSON.stringify({ path, rel: rel(path), scenes, cached: fromCache }));
+      else out(`Animation ready${fromCache ? " (unchanged code, reused)" : ""}: ${rel(path)} \u2014 open it in your browser.`);
+    };
+    const date = (/* @__PURE__ */ new Date()).toISOString();
+    ensureUnderstandingIgnore(root);
+    if (cached) {
+      const r2 = reusableVisual(root, m, z);
+      if (!("saved" in r2)) {
+        out(json ? JSON.stringify({ cached: false, reason: r2.reason }) : `No reusable animation: ${r2.reason}.`);
+        return 0;
+      }
+      const page = rerender(root, z, r2.saved, date.slice(0, 10));
+      ready(page.path, page.scenes, true);
+      return 0;
+    }
+    let raw;
+    try {
+      const fromCwd = resolve3(sbFile);
+      raw = JSON.parse(readFileSync14(existsSync4(fromCwd) ? fromCwd : resolve3(root, sbFile), "utf8"));
+    } catch (e) {
+      err(`Invalid storyboard: storyboard: could not read ${sbFile} as JSON (${e.message.split("\n")[0]})`);
+      return 2;
+    }
+    let sb;
+    try {
+      sb = checkStoryboard(raw, storyboardContextFor(root, m, z.zone.id));
+    } catch (e) {
+      if (!(e instanceof StoryboardError)) throw e;
+      err(`Invalid storyboard: ${e.message}`);
+      return 2;
+    }
+    const r = renderVisual(sb, liveZone(z), date.slice(0, 10));
+    const paths = saveVisual(root, { zone: z.zone.id, date, fingerprint: visualFingerprint(root, z.zone.files, sb), storyboard: sb }, r.html);
+    ready(paths.html, r.scenes, false);
+    return 0;
+  }),
   pick: guarded((root, args) => {
     const m = buildMap(root);
     const top = m.top[0];
@@ -4348,7 +5612,7 @@ function isDirectRun() {
   if (!process.argv[1]) return false;
   let path = process.argv[1];
   try {
-    path = realpathSync2(path);
+    path = realpathSync4(path);
   } catch {
   }
   return import.meta.url === pathToFileURL(path).href;
