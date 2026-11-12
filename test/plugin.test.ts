@@ -83,6 +83,9 @@ describe('skills', () => {
       expect(text).toContain(s);
     }
     expect(text).not.toMatch(/umap\.js" record\b/);
+    expect(text).toContain('`outcome`: "the last stop leads to');
+    expect(text).toMatch(/unconfirmed outcome is dropped/i);
+    expect(text).toMatch(/absolute path/);
     expect(text.toLowerCase()).toContain('never record');
   });
 
@@ -109,7 +112,7 @@ describe('answer-key-checker agent', () => {
   it('also checks storyboard claims, with the same output format', () => {
     const text = read('agents/answer-key-checker.md');
     expect(text).toContain('Storyboard claims');
-    for (const kind of ['hop', 'role', 'step', 'order', 'gotcha']) expect(text).toContain(`\`${kind}\``);
+    for (const kind of ['hop', 'role', 'step', 'order', 'gotcha', 'outcome']) expect(text).toContain(`\`${kind}\``);
   });
 });
 

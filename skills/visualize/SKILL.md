@@ -20,7 +20,7 @@ Always put zone ids and paths in double quotes, because some contain shell chara
 
 ## 1. Pick the zone
 
-Run `node "<base>/../../dist/umap.js" status --json`. If it reports `"setUp": false`, ask the setup skill's two questions (`/understanding-map:setup`) and run setup, then continue.
+Run `node "<base>/../../dist/umap.js" status --json` and keep its `root` (the repository's absolute path). If it reports `"setUp": false`, ask the setup skill's two questions (`/understanding-map:setup`) and run setup, then continue.
 
 - With an argument: `node "<base>/../../dist/umap.js" context "<argument>" --json`.
 - Without one: `node "<base>/../../dist/umap.js" context --json`. It uses the zone of the user's last learning session, then the top danger zone.
@@ -67,13 +67,13 @@ Write a storyboard with this shape (the example is illustrative):
 
 Rules the engine enforces (it rejects anything else):
 
-- `zone` is the zone id from `context`. Every `ref` is `path:line`, repository-relative, with a line inside the file.
+- `zone` is the zone id from `context`. Every `ref` is `path:line`, repository-relative, with a line inside the file, and the file is on the map (tracked and not excluded: never `.env`, `node_modules` or `.understanding/`).
 - Labels: plain words, at most 40 characters. `role`: one line, at most 90 characters, only on the target stop.
 - `journey`: 2–6 stops in the order the action travels, exactly one with `"target": true` whose `zone` is this zone. Every stop's `zone` is a real zone id (this zone, or one from `inbound` / `outbound`), and its `ref` is a file in that zone.
 - `steps`: 3–7, in the order they happen, every `ref` inside this zone's files.
 - `gotcha` is optional: the one thing most likely to bite someone changing this code.
 - No real product trigger (a library, build tooling, tests)? Set `"trigger": null`; the journey then starts from the most important caller. No callers either? Leave `journey`, `trigger` and `outcome` out: the visual has three scenes.
-- Never mention people, understanding levels or how much code agents wrote.
+- Never mention people, understanding levels or how much code agents wrote. The engine rejects `@mentions`, email addresses and anyone's handle.
 
 ## 5. Verify every claim with answer-key-checker (mandatory)
 
@@ -83,21 +83,23 @@ Dispatch the `answer-key-checker` subagent (listed as `understanding-map:answer-
 - `role`: the target's role, with its ref.
 - `step`: one per step, "this happens at this ref", with its ref.
 - `order`: "the steps happen in this order", with every step ref.
+- `outcome`: "the last stop leads to <outcome>", with the last stop's ref (only when there is an outcome).
 - `gotcha`: the gotcha, with its ref.
 
 It returns `[{id, confirmed, reason}]`. A claim counts as confirmed only when the checker returns it with an explicit `"confirmed": true`; anything else (a missing id, malformed or non-JSON output, or an error) counts as unconfirmed. Then:
 
 - **Steps and order:** regenerate each unconfirmed step, and the order if it was unconfirmed, **once**, using the checker's reason, and send only the new claims back. If fewer than 3 steps are confirmed after that, or the order is still unconfirmed: there is **no visual**. Tell the user this zone is too unclear to draw yet, run `node "<base>/../../dist/umap.js" unverifiable --zone "<zone id>"`, and stop. Otherwise keep only the confirmed steps.
 - **Journey:** regenerate an unconfirmed hop or role **once**. If any hop or the role is still unconfirmed, drop the journey (leave out `journey`, `trigger` and `outcome`) and say so in one line.
+- **Outcome:** an unconfirmed outcome is dropped: write the storyboard without `outcome`.
 - **Gotcha:** an unconfirmed gotcha is dropped.
 
 Never draw an unconfirmed item.
 
 ## 6. Render
 
-Write the verified storyboard with the Write tool to `.understanding/local/storyboard-draft.json` in the repository (it is never committed), then run:
+Write the verified storyboard with the Write tool to `<root>/.understanding/local/storyboard-draft.json` (an absolute path, using `root` from `status`; it is never committed), then run:
 
-`node "<base>/../../dist/umap.js" visualize "<zone id>" --storyboard ".understanding/local/storyboard-draft.json" --json`
+`node "<base>/../../dist/umap.js" visualize "<zone id>" --storyboard "<root>/.understanding/local/storyboard-draft.json" --json`
 
 - Success prints `{"path", "rel", "scenes", "cached": false}`.
 - Exit code 2 prints one line naming the field, for example `Invalid storyboard: steps[2].ref: line 90 is past the end of src/pay/charge.ts (61 lines)`. Fix only that field and run it again, **once**. If you change a `ref` or the meaning of an item, send that item back to the checker first. If it fails again, tell the user the visual could not be drawn, show the engine's line, and stop.

@@ -34,6 +34,7 @@ The same rules apply: read every cited `file:line` yourself, follow calls and im
 - `role`: the target zone's role in one line. Confirm only if the code at the ref and around it does what the role says, with nothing important invented.
 - `step`: "this happens at this ref". The cited line, or the few lines around it, must do what the step's label says.
 - `order`: "the steps happen in this order". Confirm only if a typical call runs them in that order.
+- `outcome`: "the last stop leads to <outcome>". Confirm only if the code at the last stop's ref really produces that result for the user.
 - `gotcha`: a surprising behaviour. Confirm only if the code at the ref really behaves that way.
 
 ## Output
