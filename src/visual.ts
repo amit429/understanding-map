@@ -64,7 +64,7 @@ const STEP = 3.6;
 interface Timeline {
   scenes: Array<{ id: SceneId; title: string; duration: number }>;
   why: { zone: number; badge: number; reason: number; dependents: number };
-  journey: null | { start: number; boxes: number[]; outcome: number; hops: Array<[number, number]>; reach: number; role: number };
+  journey: null | { start: number; boxes: number[]; outcome: number; hops: Array<[number, number]>; visits: Array<[number, number]>; reach: number; role: number };
   steps: Array<[number, number]>;
   outro: { gotcha: number; closing: number };
 }
@@ -77,18 +77,20 @@ export function timeline(sb: Storyboard): Timeline {
     const n = sb.journey.length;
     const boxes = sb.journey.map((_, i) => 0.8 + 0.3 * i);
     const outcome = 0.8 + 0.3 * n;
-    const points = 1 + n + (sb.outcome ? 1 : 0);
-    const targetPoint = 1 + sb.journey.findIndex((s) => s.target);
+    // One hop per arrow: hop k ends at box k, and the last one at the outcome pill when there is one.
+    const arrows = n + (sb.outcome ? 1 : 0);
+    const targetIndex = sb.journey.findIndex((s) => s.target);
     const hops: Array<[number, number]> = [];
     let t = outcome + 0.8;
     let reach = 0;
-    for (let k = 1; k < points; k++) {
+    for (let k = 0; k < arrows; k++) {
       hops.push([t, t + HOP]);
       t += HOP;
-      if (k === targetPoint) reach = t;
-      t += k === targetPoint ? TARGET_HOLD : PAUSE;
+      if (k === targetIndex) reach = t;
+      t += k === targetIndex ? TARGET_HOLD : PAUSE;
     }
-    journey = { start: 0.3, boxes, outcome, hops, reach, role: reach + 0.3 };
+    const visits = boxes.map((_, k): [number, number] => [hops[k][1], k + 1 < arrows ? hops[k + 1][0] : 1e9]);
+    journey = { start: 0.3, boxes, outcome, hops, visits, reach, role: reach + 0.3 };
     journeyDur = Math.max(14, Math.round((t + 3) * 10) / 10);
   }
   const steps = sb.steps.map((_, i): [number, number] => [1.6 + i * STEP, i === sb.steps.length - 1 ? 1e9 : 1.6 + (i + 1) * STEP]);
@@ -147,16 +149,17 @@ function svg(l: Layout, tl: Timeline, state: ZoneState, variant: 'w' | 'n'): str
     j.boxes.forEach((b, i) => {
       if (i > 0) items.push(g(line(j.arrows[i][0], j.arrows[i][1], 'arrow', marker), t.boxes[i]));
       const cls = b.target ? `box tgt st-${state}` : 'box';
-      items.push(g(rect(b.rect, 'box-bg') + text(b.label, 'box-t'), t.boxes[i], cls, b.target ? { 'data-lit': `${n2(t.reach)} 1e9`, 'data-keep-lit': '1' } : {}));
+      const lit = b.target ? { 'data-lit': `${n2(t.reach)} 1e9`, 'data-keep-lit': '1' } : { 'data-lit': `${n2(t.visits[i][0])} ${n2(t.visits[i][1])}` };
+      items.push(g(rect(b.rect, 'box-bg') + text(b.label, 'box-t'), t.boxes[i], cls, lit));
     });
     if (j.outcome) {
-      items.push(g(pillSvg(j.outcome, 'pill end'), t.outcome));
+      items.push(g(pillSvg(j.outcome, 'pill'), t.outcome, 'end', { 'data-lit': `${n2(t.hops[t.hops.length - 1][1])} 1e9`, 'data-keep-lit': '1' }));
       items.push(g(line(j.arrows[j.arrows.length - 1][0], j.arrows[j.arrows.length - 1][1], 'arrow', marker), t.outcome));
     }
-    items.push(g(line(j.roleLink[0], j.roleLink[1], 'link'), t.role, 'home-only'));
+    if (j.roleLink) items.push(g(line(j.roleLink[0], j.roleLink[1], 'link'), t.role, 'home-only'));
     items.push(g(text(j.role, 'role'), t.role, 'home-only'));
     items.push(g(pillSvg(j.roleRef, 'chip'), t.role + 0.4, 'home-only'));
-    items.push(`<circle class="dot" r="${variant === 'w' ? 8 : 6}" cx="${n2(j.dot[0].x)}" cy="${n2(j.dot[0].y)}"/>`);
+    items.push(`<circle class="dot" r="${variant === 'w' ? 8 : 6}" cx="${n2(j.arrows[0][0].x)}" cy="${n2(j.arrows[0][0].y)}"/>`);
     parts.push(`<g class="layer" data-layer="journey">${items.join('')}</g>`);
   }
 
@@ -224,8 +227,8 @@ export function renderVisual(sb: Storyboard, z: LiveZone, generatedAt: string): 
     scenes: tl.scenes,
     dot: tl.journey ? {
       hops: tl.journey.hops,
-      w: wide.journey!.dot.map((p) => [Math.round(p.x * 10) / 10, Math.round(p.y * 10) / 10]),
-      n: narrow.journey!.dot.map((p) => [Math.round(p.x * 10) / 10, Math.round(p.y * 10) / 10]),
+      w: wide.journey!.arrows.map(([a, b]) => [a.x, a.y, b.x, b.y].map((v) => Math.round(v * 10) / 10)),
+      n: narrow.journey!.arrows.map(([a, b]) => [a.x, a.y, b.x, b.y].map((v) => Math.round(v * 10) / 10)),
     } : null,
     storyboard: sb,
   };

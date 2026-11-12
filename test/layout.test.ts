@@ -81,8 +81,16 @@ function checkLayout(l: Layout, inp: LayoutInput) {
         for (const pt of [p, q]) expect(pt.x > b.rect.x && pt.x < b.rect.x + b.rect.w && pt.y > b.rect.y && pt.y < b.rect.y + b.rect.h).toBe(false);
       }
     }
-    expect(j.dot).toHaveLength(inp.journey.stops.length + 1 + (inp.journey.outcome ? 1 : 0));
+    expect(j.arrows).toHaveLength(inp.journey.stops.length + (inp.journey.outcome ? 1 : 0));
+    for (const [p, q] of j.arrows.slice(1, inp.journey.stops.length)) expect(Math.hypot(q.x - p.x, q.y - p.y)).toBeGreaterThanOrEqual(20);
     expect(j.target).toBe(j.boxes.find((b) => b.target)!.rect);
+    if (j.roleLink) {
+      const [p, q] = j.roleLink;
+      const seg = { x: p.x - 1, y: p.y, w: 2, h: q.y - p.y };
+      expect(seg.h).toBeGreaterThan(0);
+      const others = [...j.boxes.map((b) => b.rect), j.start.rect, ...(j.outcome ? [j.outcome.rect] : []), j.roleRef.rect];
+      for (const r of others) expect(overlaps(seg, r), 'the role link crosses another element').toBe(false);
+    }
   }
   l.inside.rows.forEach((r, i) => {
     const circle = { x: r.num.cx - r.num.r, y: r.num.cy - r.num.r, w: 2 * r.num.r, h: 2 * r.num.r };
@@ -120,6 +128,19 @@ describe('layoutVisual', () => {
     expect(new Set(n.boxes.map((b) => b.rect.y)).size).toBe(3);
     expect(n.boxes[2].rect.x).toBe(n.boxes[1].rect.x); // the snake turns down, not back to the left edge
     expect(new Set(layoutVisual(input(4, 3), NARROW).journey!.boxes.map((b) => b.rect.y)).size).toBe(2);
+  });
+
+  it('keeps a short state badge on one line', () => {
+    for (const width of [WIDE, NARROW]) for (const s of ['Dark', 'Owned', 'Fading', 'Fragile', 'Unknown']) {
+      expect(layoutVisual({ ...input(3, 3), stateLabel: s }, width).why.badge.text.lines).toEqual([s]);
+    }
+  });
+
+  it('gives wide journeys of up to 4 stops long arrows for the dot', () => {
+    for (const n of [2, 3, 4]) {
+      const j = layoutVisual(input(n, 3), WIDE).journey!;
+      for (const [p, q] of j.arrows.slice(1, n)) expect(q.x - p.x).toBeGreaterThanOrEqual(60);
+    }
   });
 
   it('wraps a very long zone id and reason without overflow and grows the stage', () => {

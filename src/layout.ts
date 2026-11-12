@@ -37,13 +37,12 @@ export interface JourneyLayout {
   start: Pill;
   outcome: Pill | null;
   boxes: Array<{ rect: Rect; label: TextBlock; target: boolean }>;
-  /** Arrow segments: start pill → first box, box → box, last box → outcome pill. */
+  /** Arrow segments, which are also the dot's path: start pill → first box, box → box, last box → outcome pill. */
   arrows: Array<[Point, Point]>;
-  /** Waypoints the dot travels: start pill, every box centre, then the outcome pill. */
-  dot: Point[];
   role: TextBlock;
   roleRef: Pill;
-  roleLink: [Point, Point];
+  /** A dashed link from the target box down to its role caption (wide only: on narrow, other boxes sit below it). */
+  roleLink: [Point, Point] | null;
   target: Rect;
 }
 export interface StepRow { rect: Rect; num: { cx: number; cy: number; r: number; size: number }; label: TextBlock; chip: Pill }
@@ -198,8 +197,9 @@ const METRICS: Record<'wide' | 'narrow', Metrics> = {
 function layoutJourney(j: NonNullable<LayoutInput['journey']>, heading: TextBlock, W: number, m: Metrics, narrow: boolean): JourneyLayout {
   const n = j.stops.length;
   const rowW = W - 2 * m.M;
-  const gap = narrow ? 28 : 36;
-  const boxW = narrow ? (rowW - gap) / 2 : Math.min(220, (rowW - (n - 1) * gap) / n);
+  // Wide: boxes up to 200 units, and arrows as long as the row allows (36–80), so the travelling dot stays visible.
+  const boxW = narrow ? (rowW - 28) / 2 : Math.min(200, (rowW - (n - 1) * 36) / n);
+  const gap = narrow ? 28 : Math.min(80, (rowW - n * boxW) / (n - 1));
   const textW = boxW - 2 * m.boxPadX;
   const labelSize = fitOrFail(j.stops.map((s) => ({ text: s.label, field: s.field })), textW, m.labelSizes, 2, { bold: true }, 'in its box');
   const lst: TextStyle = { size: labelSize, bold: true };
@@ -213,7 +213,7 @@ function layoutJourney(j: NonNullable<LayoutInput['journey']>, heading: TextBloc
   const pillSize = fitOrFail(pillItems, pillTextMax, m.pillSizes, 2, {}, 'in its pill');
   const pst: TextStyle = { size: pillSize };
 
-  const pillsTop = bottom(heading) + (narrow ? 22 : 64);
+  const pillsTop = bottom(heading) + (narrow ? 22 : 96);
   const rowX0 = narrow ? m.M : (W - (n * boxW + (n - 1) * gap)) / 2;
   const slot = (i: number) => {
     if (!narrow) return { col: i, row: 0 };
@@ -266,11 +266,6 @@ function layoutJourney(j: NonNullable<LayoutInput['journey']>, heading: TextBloc
       ? [{ x: ox, y: bottom(last) + 4 }, { x: ox, y: outcome.rect.y - 4 }]
       : [{ x: ox, y: last.y - 4 }, { x: ox, y: bottom(outcome.rect) + 4 }]);
   }
-  const dot: Point[] = [
-    { x: ax, y: cyOf(start.rect) },
-    ...boxes.map((b) => ({ x: cxOf(b.rect), y: cyOf(b.rect) })),
-    ...(outcome ? [{ x: cxOf(outcome.rect), y: cyOf(outcome.rect) }] : []),
-  ];
 
   const below = Math.max(gridBottom, outcome ? bottom(outcome.rect) : 0);
   const roleW = Math.min(880, rowW);
@@ -279,8 +274,8 @@ function layoutJourney(j: NonNullable<LayoutInput['journey']>, heading: TextBloc
   const chipSt: TextStyle = { size: m.chip, mono: true };
   const roleRef = pill(j.roleRef, W / 2, bottom(role) + 12, roleW - 20, chipSt, 10, 5, [m.M, W - m.M]);
   const target = boxes.find((b) => b.target)!.rect;
-  const roleLink: [Point, Point] = [{ x: cxOf(target), y: bottom(target) + 4 }, { x: cxOf(target), y: role.y - 6 }];
-  return { heading, start, outcome, boxes, arrows, dot, role, roleRef, roleLink, target };
+  const roleLink: [Point, Point] | null = narrow ? null : [{ x: cxOf(target), y: bottom(target) + 4 }, { x: cxOf(target), y: role.y - 6 }];
+  return { heading, start, outcome, boxes, arrows, role, roleRef, roleLink, target };
 }
 
 function layoutAt(input: LayoutInput, W: number): Layout {
@@ -294,7 +289,7 @@ function layoutAt(input: LayoutInput, W: number): Layout {
   const zone = block(input.zoneId, m.M, m.whyTop, rowW, { size: m.zone, mono: true, bold: true }, 'start');
   const badgeSt: TextStyle = { size: m.badge, bold: true };
   const bw = measure(input.stateLabel, badgeSt) + 28;
-  const badgeText = block(input.stateLabel, m.M + 14, bottom(zone) + 24 + 6, bw - 28, badgeSt, 'middle');
+  const badgeText = block(input.stateLabel, m.M + 14, bottom(zone) + 24 + 6, bw - 28, badgeSt, 'middle', [input.stateLabel]);
   const badge = { rect: { x: m.M, y: bottom(zone) + 24, w: bw, h: badgeText.h + 12 }, text: badgeText };
   const reason = block(input.reason, m.M, bottom(badge.rect) + 24, rowW, { size: m.body }, 'start');
   const dependents = block(input.dependents, m.M, bottom(reason) + 14, rowW, { size: m.body, bold: true }, 'start');

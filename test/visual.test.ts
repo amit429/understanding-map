@@ -38,7 +38,9 @@ describe('renderVisual', () => {
     for (const s of [...sb().steps.map((x) => x.ref), 'Dark', '14 files depend on it', 'Watch out']) expect(r.html).toContain(s);
     const d = data(r.html);
     expect(d.scenes.map((s: { id: string }) => s.id)).toEqual(r.scenes);
-    expect(d.dot.w).toHaveLength(6);
+    expect(d.dot.w).toHaveLength(5);
+    expect(d.dot.hops).toHaveLength(5);
+    expect(d.dot.w[0]).toHaveLength(4);
     expect(d.storyboard).toEqual(sb());
   });
 
@@ -107,11 +109,27 @@ describe('renderVisual', () => {
   });
 });
 
+describe('stage classes', () => {
+  it('every class drawn on the stage is styled or is a known player hook', () => {
+    const html = renderVisual(sb(), live, 'd').html;
+    const css = html.slice(html.indexOf('<style>'), html.indexOf('</style>'));
+    const stage = html.slice(html.indexOf('<div class="stage"'), html.indexOf('<div class="controls"'));
+    const used = new Set([...stage.matchAll(/class="([^"]+)"/g)].flatMap((m) => m[1].split(' ')));
+    const hooks = new Set(['el', 'home-only', 'end', 'zone', 'small', 'body', 'role', 'gotcha-h', 'gotcha-t', 'pill-t', 'box-t', 'chip-t', 'row-t', 'num-t', 'layer', 'stage']);
+    const unstyled = [...used].filter((c) => !hooks.has(c) && !new RegExp(`\\.${c.replace(/[^a-z0-9-]/g, '')}\\b`).test(css));
+    expect(unstyled).toEqual([]);
+  });
+});
+
 describe('timeline', () => {
   it('hops the dot through every stop, lights the target on arrival and steps in order', () => {
     const tl = timeline(sb());
     expect(tl.journey!.hops).toHaveLength(5);
     expect(tl.journey!.reach).toBe(tl.journey!.hops[2][1]);
+    tl.journey!.visits.forEach(([a, b], k) => {
+      expect(a).toBe(tl.journey!.hops[k][1]);
+      expect(b).toBeGreaterThan(a);
+    });
     for (let i = 1; i < tl.steps.length; i++) expect(tl.steps[i][0]).toBe(tl.steps[i - 1][1]);
     const total = tl.scenes.reduce((s, x) => s + x.duration, 0);
     expect(total).toBeGreaterThan(40);

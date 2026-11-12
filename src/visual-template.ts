@@ -28,14 +28,15 @@ export const PLAYER_JS = String.raw`(function () {
   });
   function ease(x) { x = x < 0 ? 0 : x > 1 ? 1 : x; return x < 0.5 ? 2 * x * x : 1 - Math.pow(-2 * x + 2, 2) / 2; }
   function mix(a, b, k) { return a.map(function (v, i) { return v + (b[i] - v) * k; }); }
-  function dotAt(pts) {
-    var h = data.dot.hops, p = pts[0];
+  function dotAt(arrows) {
+    var h = data.dot.hops;
     for (var k = 0; k < h.length; k++) {
-      if (t >= h[k][1]) p = pts[k + 1];
-      else if (t >= h[k][0]) { p = mix(pts[k], pts[k + 1], ease((t - h[k][0]) / (h[k][1] - h[k][0]))); break; }
-      else break;
+      if (t >= h[k][0] && t < h[k][1]) {
+        var a = arrows[k], e = ease((t - h[k][0]) / (h[k][1] - h[k][0]));
+        return [a[0] + (a[2] - a[0]) * e, a[1] + (a[3] - a[1]) * e];
+      }
     }
-    return p;
+    return null;
   }
   function render() {
     var sc = scenes[idx].id;
@@ -54,10 +55,9 @@ export const PLAYER_JS = String.raw`(function () {
       if (journey && sc === 'outro' && t < Z) box = mix(v.zoom, v.full, ease(t / Z));
       v.s.setAttribute('viewBox', box.join(' '));
       if (v.dot) {
-        var p = dotAt(v.pts);
-        v.dot.setAttribute('cx', p[0]);
-        v.dot.setAttribute('cy', p[1]);
-        v.dot.classList.toggle('on', sc === 'journey' && t >= data.dot.hops[0][0] - 0.4);
+        var p = sc === 'journey' ? dotAt(v.pts) : null;
+        if (p) { v.dot.setAttribute('cx', p[0]); v.dot.setAttribute('cy', p[1]); }
+        v.dot.classList.toggle('on', !!p);
       }
     });
     label.textContent = 'Scene ' + (idx + 1) + ' of ' + n + ': ' + scenes[idx].title.replace(/^\d+ · /, '');
@@ -156,14 +156,16 @@ text { fill: var(--text); font-family: var(--font); }
 .badge-t { fill: var(--on-st); }
 .box-bg { fill: var(--bg); stroke: var(--border); stroke-width: 1.5; }
 .box-t { fill: var(--text); }
+.box.lit .box-bg { stroke: var(--accent); stroke-width: 2.5; }
 .box.tgt .box-bg { fill: var(--st); stroke: var(--st); }
 .box.tgt .box-t { fill: var(--on-st); }
 .box.tgt.lit .box-bg { stroke: var(--accent); stroke-width: 3; filter: drop-shadow(0 0 10px var(--accent)); }
 .pill-bg { fill: color-mix(in srgb, var(--accent) 12%, var(--surface)); stroke: var(--accent); stroke-width: 1.5; }
+.end.lit .pill-bg { fill: color-mix(in srgb, var(--accent) 28%, var(--surface)); stroke-width: 2.5; }
 .arrow { stroke: var(--muted); stroke-width: 2; }
 .ah { fill: var(--muted); }
 .link { stroke: var(--accent); stroke-width: 1.5; stroke-dasharray: 4 4; }
-.dot { fill: var(--accent); stroke: var(--surface); stroke-width: 2; opacity: 0; transition: opacity .3s; }
+.dot { fill: var(--accent); stroke: var(--surface); stroke-width: 2; opacity: 0; transition: opacity .15s; }
 .dot.on { opacity: 1; }
 .chip-bg { fill: var(--bg); stroke: var(--border); }
 .chip-t { fill: var(--muted); }
