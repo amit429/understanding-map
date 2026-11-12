@@ -37,15 +37,8 @@ export function howEstimatesWork(mode: Config['mode'], s: MethodSettings): strin
   return `<ul class="method">${items.map((i) => `<li>${i}</li>`).join('')}</ul>`;
 }
 
-/** Self-contained report shell. Placeholders (__NAME__) are filled by report.ts; nothing here loads over the network. */
-export const REPORT_TEMPLATE = String.raw`<!doctype html>
-<html lang="en">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Understanding Map</title>
-<style>
-:root {
+/** Colour tokens (light and dark) and state colours shared by report.html and the visualize page. */
+export const THEME_CSS = String.raw`:root {
   --bg: #f7f6f2; --surface: #ffffff; --text: #1f2328; --muted: #5c6470; --border: #dcdad2;
   --owned: #2f9e5b; --fragile: #e0a21a; --fading: #f2d38a; --dark: #a11d2b; --unknown: #9aa0a8;
   --on-owned: #ffffff; --on-fragile: #1f2328; --on-fading: #1f2328; --on-dark: #ffffff; --on-unknown: #1f2328;
@@ -61,7 +54,17 @@ export const REPORT_TEMPLATE = String.raw`<!doctype html>
     --accent: #6ea8ff;
   }
 }
-* { box-sizing: border-box; }
+`;
+
+/** Self-contained report shell. Placeholders (__NAME__) are filled by report.ts; nothing here loads over the network. */
+export const REPORT_TEMPLATE = String.raw`<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Understanding Map</title>
+<style>
+${THEME_CSS}* { box-sizing: border-box; }
 html { background: var(--bg); }
 body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.5 var(--font); }
 main { max-width: 1100px; margin: 0 auto; padding: 16px; }
