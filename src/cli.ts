@@ -1,4 +1,4 @@
-import { readFileSync, realpathSync } from 'node:fs';
+import { existsSync, readFileSync, realpathSync } from 'node:fs';
 import { relative, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { ensureUnderstandingIgnore, isSetUp, loadConfig } from './config.js';
@@ -348,7 +348,9 @@ export const commands: Record<string, Command> = {
 
     let raw: unknown;
     try {
-      raw = JSON.parse(readFileSync(resolve(sbFile!), 'utf8'));
+      // Relative paths resolve against the working directory, then the repository root.
+      const fromCwd = resolve(sbFile!);
+      raw = JSON.parse(readFileSync(existsSync(fromCwd) ? fromCwd : resolve(root, sbFile!), 'utf8'));
     } catch (e) {
       err(`Invalid storyboard: storyboard: could not read ${sbFile} as JSON (${(e as Error).message.split('\n')[0]})`);
       return 2;

@@ -321,6 +321,15 @@ describe('cli visualize', () => {
     expect(unknown.code).toBe(1);
   });
 
+  it('finds a relative --storyboard path from the repository root when the working directory is elsewhere', async () => {
+    const { root, file } = await setup();
+    mkdirSync(join(root, '.understanding', 'local'), { recursive: true });
+    writeFileSync(join(root, '.understanding', 'local', 'storyboard-draft.json'), readFileSync(file, 'utf8'));
+    const r = await run(join(root, 'src', 'api'), ['visualize', 'src/payments', '--storyboard', '.understanding/local/storyboard-draft.json', '--json']);
+    expect(r.stderr).toBe('');
+    expect(JSON.parse(r.stdout).cached).toBe(false);
+  });
+
   it('map links the report to a fresh animation only', async () => {
     const { root, file } = await setup();
     const { visualSlug } = await import('../src/visual-store');
