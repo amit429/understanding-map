@@ -70,7 +70,10 @@ Give the grade and a short explanation that cites the code (`file:line`), then m
 
 Run `node "<base>/../../dist/umap.js" record --kind session --zones <zone id> --grades <g1>,<g2>[,<g3>]` with the grades in question order (`pass`, `partial` or `miss`).
 
-Show each change the engine prints as `zone: Before → After` (for example "payments: Dark → Owned"), and call the new level an estimate. If it prints `Result: miss`, nothing changed: suggest trying this zone again in 3 or more days, with different questions.
+The first line it prints is always `Result: pass`, `Result: partial` or `Result: miss`. Branch on that line:
+
+- **`Result: pass` or `Result: partial`:** the lines after it are either changes, `zone: Before → After (level a → b)`, or `No change on the map.`. Show each change as `zone: Before → After` (for example "payments: Dark → Owned") and call the new level an estimate. If it says `No change on the map.`, say the result is recorded and the zone's estimate was already at or above that level, so the map looks the same.
+- **`Result: miss`:** nothing changed on the map. Suggest trying this zone again in 3 or more days, with different questions.
 
 ## Stopping
 

@@ -220,8 +220,17 @@ export const commands: Record<string, Command> = {
       }
     }
     const r = recordResult(root, { kind, zones, grades: grades as Grade[] });
-    if (parseArgs(args).flags.has('--json')) out(JSON.stringify(r));
-    else out(r.changes.map((c) => `${c.zone}: ${cap(c.before)} → ${cap(c.after)} (level ${c.levelBefore} → ${c.levelAfter})`).join('\n') || `Result: ${r.result}`);
+    // Text and --json report the same changes: only zones whose state or level actually moved.
+    const changes = r.changes.filter((c) => c.before !== c.after || c.levelBefore !== c.levelAfter);
+    if (parseArgs(args).flags.has('--json')) out(JSON.stringify({ result: r.result, changes }));
+    else {
+      out([
+        `Result: ${r.result}`,
+        ...(changes.length
+          ? changes.map((c) => `${c.zone}: ${cap(c.before)} → ${cap(c.after)} (level ${c.levelBefore} → ${c.levelAfter})`)
+          : ['No change on the map.']),
+      ].join('\n'));
+    }
     return 0;
   }),
 

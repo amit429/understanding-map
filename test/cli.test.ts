@@ -124,7 +124,19 @@ describe('cli record and handoff', () => {
     expect(j.code).toBe(0);
     expect(JSON.parse(j.stdout)).toMatchObject({ result: 'pass', changes: [{ zone: 'agent', before: 'dark', after: 'owned' }] });
     const t = await run(root, ['record', '--kind', 'session', '--zones', 'human', '--grades', 'pass']);
-    expect(t.stdout).toMatch(/^human: \w+ → Owned \(level \d+ → 80\)/);
+    expect(t.stdout).toMatch(/^Result: pass\nhuman: \w+ → Owned \(level \d+ → 80\)\n$/);
+  });
+
+  it('record text always starts with the Result line and prints only real changes, or says nothing changed', async () => {
+    const root = fixture();
+    const first = await run(root, ['record', '--kind', 'session', '--zones', 'agent', '--grades', 'pass,pass']);
+    expect(first.stdout).toMatch(/^Result: pass\nagent: Dark → Owned \(level \d+ → 80\)\n$/);
+    const again = await run(root, ['record', '--kind', 'session', '--zones', 'agent', '--grades', 'pass,pass']);
+    expect(again.stdout).toBe('Result: pass\nNo change on the map.\n');
+    const againJson = await run(root, ['record', '--kind', 'session', '--zones', 'agent', '--grades', 'pass', '--json']);
+    expect(JSON.parse(againJson.stdout)).toEqual({ result: 'pass', changes: [] });
+    const miss = await run(root, ['record', '--kind', 'session', '--zones', 'old', '--grades', 'miss,miss']);
+    expect(miss.stdout).toBe('Result: miss\nNo change on the map.\n');
   });
 
   it('rejects bad input with exit 2', async () => {

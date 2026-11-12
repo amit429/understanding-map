@@ -42,7 +42,13 @@ Ask the user to answer in their own words without AI help; it is on their honour
 
 ## 5. Record
 
-Run `node "<base>/../../dist/umap.js" record --kind handoff --grades <g1>,<g2>`. Show each change it prints as `zone: Before → After` and call the levels estimates. If it prints only `Result: partial` or `Result: miss`, say nothing changed on the map and the check is done. Either way the not-yet-checked set is now cleared.
+Run `node "<base>/../../dist/umap.js" record --kind handoff --grades <g1>,<g2>`. The first line it prints is always `Result: pass`, `Result: partial` or `Result: miss`; the lines after it are either changes, `zone: Before → After (level a → b)`, or `No change on the map.`. Branch on the `Result:` line:
+
+- **`Result: pass`:** show each change as `zone: Before → After` and call the levels estimates. If it says `No change on the map.`, say the check passed and those zones were already at or above that level.
+- **`Result: partial`:** say the check is done and nothing changed on the map.
+- **`Result: miss`:** say the check is done, nothing was raised on the map, and the touched zones are marked as unreviewed agent code, which they can learn later with `/understanding-map:learn`.
+
+Whatever the result, the not-yet-checked set is now cleared.
 
 ## Skip
 

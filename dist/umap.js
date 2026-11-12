@@ -4190,8 +4190,14 @@ var commands = {
       }
     }
     const r = recordResult(root, { kind, zones, grades });
-    if (parseArgs(args).flags.has("--json")) out(JSON.stringify(r));
-    else out(r.changes.map((c) => `${c.zone}: ${cap(c.before)} \u2192 ${cap(c.after)} (level ${c.levelBefore} \u2192 ${c.levelAfter})`).join("\n") || `Result: ${r.result}`);
+    const changes = r.changes.filter((c) => c.before !== c.after || c.levelBefore !== c.levelAfter);
+    if (parseArgs(args).flags.has("--json")) out(JSON.stringify({ result: r.result, changes }));
+    else {
+      out([
+        `Result: ${r.result}`,
+        ...changes.length ? changes.map((c) => `${c.zone}: ${cap(c.before)} \u2192 ${cap(c.after)} (level ${c.levelBefore} \u2192 ${c.levelAfter})`) : ["No change on the map."]
+      ].join("\n"));
+    }
     return 0;
   }),
   unverifiable: guarded((root, args) => {
