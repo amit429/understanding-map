@@ -35,7 +35,7 @@ describe('renderVisual', () => {
     expect(r.html.match(/<svg class="v v-/g)).toHaveLength(2);
     expect(r.html).toContain('viewBox="0 0 1280 ');
     expect(r.html).toContain('viewBox="0 0 375 ');
-    for (const s of [...sb().steps.map((x) => x.ref), 'Dark', '14 files depend on it', 'Watch out']) expect(r.html).toContain(s);
+    for (const s of [...sb().steps.map((x) => x.ref), 'Dark', 'Watch out']) expect(r.html).toContain(s);
     const d = data(r.html);
     expect(d.scenes.map((s: { id: string }) => s.id)).toEqual(r.scenes);
     expect(d.dot.w).toHaveLength(5);
@@ -106,6 +106,25 @@ describe('renderVisual', () => {
     const z = { ...live, people: [{ handle: 'priya', level: 8761 }], agentShare: 0.7391, danger: 55 } as unknown as LiveZone;
     const html = renderVisual(sb(), z, 'd').html;
     for (const s of ['priya', '8761', '74%', '0.7391', 'agent']) expect(html).not.toContain(s);
+  });
+});
+
+describe('scene 1', () => {
+  const whyText = (html: string) => {
+    const svg = html.slice(html.indexOf('<svg class="v v-w"'));
+    const layer = svg.slice(svg.indexOf('data-layer="why"'), svg.indexOf('data-layer="journey"'));
+    return [...layer.matchAll(/<tspan[^>]*>([^<]*)<\/tspan>/g)].map((m) => m[1]).join(' ');
+  };
+  it('says the state once (the badge), then the reason without the state word', () => {
+    const t = whyText(renderVisual(sb(), live, 'd').html);
+    expect(t.match(/Dark/g)).toHaveLength(1);
+    expect(t).toContain('14 files import it');
+    expect(t).not.toContain('depend on it');
+  });
+  it('says so when nothing imports the zone', () => {
+    const t = whyText(renderVisual(sb(), { ...live, state: 'fading', reason: 'Fading', fanIn: 0 }, 'd').html);
+    expect(t).toContain('No other files import it');
+    expect(t.match(/Fading/g)).toHaveLength(1);
   });
 });
 

@@ -20,8 +20,7 @@ function input(stops: number | null, steps: number, opts: { gotcha?: boolean; ou
     headings: { why: '1 · Why this matters', journey: '2 · Product journey', inside: '3 · Inside the zone', outro: '4 · Back out' },
     zoneId,
     stateLabel: 'Fading',
-    reason: opts.reason ?? 'Fading · 14 files import it · 6 fixes in the last 90 days · tagged critical',
-    dependents: '14 files depend on it',
+    reason: opts.reason ?? '14 files import it · 6 fixes in the last 90 days · tagged critical',
     journey: stops === null ? null : {
       start: { label: LABELS[2], field: 'trigger.label' },
       stops: Array.from({ length: stops }, (_, i) => ({ label: LABELS[i % LABELS.length], field: `journey[${i}].label`, target: i === Math.floor(stops / 2) })),

@@ -18,7 +18,6 @@ export interface LayoutInput {
   zoneId: string;
   stateLabel: string;
   reason: string;
-  dependents: string;
   journey: null | {
     start: { label: string; field: string };
     stops: Array<{ label: string; field: string; target: boolean }>;
@@ -49,7 +48,7 @@ export interface StepRow { rect: Rect; num: { cx: number; cy: number; r: number;
 export interface Layout {
   width: number;
   height: number;
-  why: { heading: TextBlock; zone: TextBlock; badge: Pill; reason: TextBlock; dependents: TextBlock };
+  why: { heading: TextBlock; zone: TextBlock; badge: Pill; reason: TextBlock };
   journey: JourneyLayout | null;
   inside: { heading: TextBlock; title: TextBlock; rows: StepRow[] };
   outro: { heading: TextBlock; gotcha: null | { rect: Rect; title: TextBlock; label: TextBlock; chip: Pill }; closing: TextBlock };
@@ -292,8 +291,7 @@ function layoutAt(input: LayoutInput, W: number): Layout {
   const badgeText = block(input.stateLabel, m.M + 14, bottom(zone) + 24 + 6, bw - 28, badgeSt, 'middle', [input.stateLabel]);
   const badge = { rect: { x: m.M, y: bottom(zone) + 24, w: bw, h: badgeText.h + 12 }, text: badgeText };
   const reason = block(input.reason, m.M, bottom(badge.rect) + 24, rowW, { size: m.body }, 'start');
-  const dependents = block(input.dependents, m.M, bottom(reason) + 14, rowW, { size: m.body, bold: true }, 'start');
-  const why = { heading: head(input.headings.why), zone, badge, reason, dependents };
+  const why = { heading: head(input.headings.why), zone, badge, reason };
 
   // Scene 2: product journey.
   const journey = input.journey ? layoutJourney(input.journey, head(input.headings.journey), W, m, narrow) : null;
@@ -349,7 +347,7 @@ function layoutAt(input: LayoutInput, W: number): Layout {
   const outro = { heading: oHeading, gotcha, closing };
 
   const ends = [
-    bottom(dependents),
+    bottom(reason),
     bottom(closing),
     ...(journey ? [bottom(journey.roleRef.rect)] : []),
     ...rows.map((r) => bottom(r.rect)),
@@ -386,7 +384,7 @@ export function sceneRects(l: Layout): Record<'why' | 'journey' | 'inside' | 'ou
   const j = l.journey;
   return {
     why: [t('heading', l.why.heading), t('zone', l.why.zone), { name: 'badge', rect: l.why.badge.rect }, t('badge.text', l.why.badge.text, l.why.badge.rect),
-      t('reason', l.why.reason), t('dependents', l.why.dependents)],
+      t('reason', l.why.reason)],
     journey: j ? [t('heading', j.heading), ...journeyRow(j), t('role', j.role), { name: 'roleRef', rect: j.roleRef.rect }, t('roleRef.text', j.roleRef.text, j.roleRef.rect)] : [],
     inside: [t('heading', l.inside.heading), t('title', l.inside.title),
       ...l.inside.rows.flatMap((r, i) => [{ name: `row${i}`, rect: r.rect }, t(`row${i}.label`, r.label, r.rect),

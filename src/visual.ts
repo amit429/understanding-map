@@ -15,6 +15,12 @@ export const learnCommand = (zoneId: string) => `/understanding-map:learn ${zone
 const cap = (s: string) => s[0].toUpperCase() + s.slice(1);
 const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
 
+/** The reason without its leading state word (the badge already shows the state), or a plain line when it is empty. */
+export function reasonLine(z: LiveZone): string {
+  const rest = z.reason.replace(new RegExp(`^${cap(z.state)}(\\s*·\\s*)?`), '').trim();
+  return rest || (z.fanIn > 0 ? `${plural(z.fanIn, 'file imports', 'files import')} it` : 'No other files import it');
+}
+
 export function sceneIds(sb: Storyboard): SceneId[] {
   return sb.journey ? ['why', 'journey', 'inside', 'outro'] : ['why', 'inside', 'outro'];
 }
@@ -28,8 +34,7 @@ export function layoutInputFor(sb: Storyboard, z: LiveZone): LayoutInput {
     headings: { why: heading('why'), journey: sb.journey ? heading('journey') : '', inside: heading('inside'), outro: heading('outro') },
     zoneId: z.id,
     stateLabel: cap(z.state),
-    reason: z.reason,
-    dependents: z.fanIn > 0 ? `${plural(z.fanIn, 'file depends', 'files depend')} on it` : 'No other files import it',
+    reason: reasonLine(z),
     journey: sb.journey && {
       start: sb.trigger ? { label: sb.trigger.label, field: 'trigger.label' } : { label: 'Called by', field: 'trigger' },
       stops: sb.journey.map((s, i) => ({ label: s.label, field: `journey[${i}].label`, target: s.target })),
@@ -63,14 +68,14 @@ const STEP = 3.6;
 
 interface Timeline {
   scenes: Array<{ id: SceneId; title: string; duration: number }>;
-  why: { zone: number; badge: number; reason: number; dependents: number };
+  why: { zone: number; badge: number; reason: number };
   journey: null | { start: number; boxes: number[]; outcome: number; hops: Array<[number, number]>; visits: Array<[number, number]>; reach: number; role: number };
   steps: Array<[number, number]>;
   outro: { gotcha: number; closing: number };
 }
 
 export function timeline(sb: Storyboard): Timeline {
-  const why = { zone: 0.3, badge: 1.2, reason: 2, dependents: 3.2 };
+  const why = { zone: 0.3, badge: 1.2, reason: 2.2 };
   let journey: Timeline['journey'] = null;
   let journeyDur = 0;
   if (sb.journey) {
@@ -137,7 +142,6 @@ function svg(l: Layout, tl: Timeline, state: ZoneState, variant: 'w' | 'n'): str
     g(text(w.zone, 'zone'), tl.why.zone) +
     g(rect(w.badge.rect, `badge-bg st-${state}`, 6) + text(w.badge.text, `badge-t st-${state}`), tl.why.badge) +
     g(text(w.reason, 'body'), tl.why.reason) +
-    g(text(w.dependents, 'body strong'), tl.why.dependents) +
     `</g>`);
 
   const j = l.journey;
@@ -194,7 +198,7 @@ function captions(sb: Storyboard, z: LiveZone, input: LayoutInput, tl: Timeline)
   for (const s of tl.scenes) {
     let body = '';
     if (s.id === 'why') {
-      body = `<p><code>${esc(z.id)}</code> is <strong>${esc(cap(z.state))}</strong>. ${esc(z.reason)}. ${esc(input.dependents)}.</p>`;
+      body = `<p><code>${esc(z.id)}</code> is <strong>${esc(cap(z.state))}</strong>. ${esc(input.reason)}.</p>`;
     } else if (s.id === 'journey' && sb.journey) {
       const stops = sb.journey.map((j) => (j.target ? `<strong>${esc(j.label)}</strong>` : esc(j.label)) + ` (${ref(j.ref)})`);
       const start = sb.trigger ? `${esc(sb.trigger.label)} (${ref(sb.trigger.ref)})` : 'Called by';
