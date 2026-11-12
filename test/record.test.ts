@@ -78,6 +78,17 @@ describe('handoff', () => {
     expect(s.edits).toHaveLength(4);
   });
 
+  it('leaves edits to excluded paths out of the set', () => {
+    const { root } = setup();
+    edit(root, 'dist/umap.js', 400, daysAgo(2));
+    edit(root, 'node_modules/x/i.js', 40, daysAgo(2));
+    edit(root, 'agent/a.ts', 30, daysAgo(1));
+    const s = handoffSet(root);
+    expect(s.totalLines).toBe(30);
+    expect(s.zones.map((z) => z.zone)).toEqual(['agent']);
+    expect(s.edits.map((e) => e.file)).toEqual(['agent/a.ts']);
+  });
+
   it('a pass appends handoff passes at max(current, 65) and empties the set', () => {
     const { root, home } = setup();
     buildMap(root, { now: NOW, homeDir: home });

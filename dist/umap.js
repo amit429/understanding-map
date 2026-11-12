@@ -2124,8 +2124,11 @@ var MAX_FILE_BYTES = 1024 * 1024;
 var SPLIT_ABOVE = 3e3;
 var MERGE_BELOW = 150;
 var ROOT_ID = "(root)";
+function excludeMatcher(exclude) {
+  return (0, import_picomatch.default)([...DEFAULT_EXCLUDES, ...exclude], { dot: true });
+}
 function readFileEntries(root, paths, exclude) {
-  const isExcluded = (0, import_picomatch.default)([...DEFAULT_EXCLUDES, ...exclude], { dot: true });
+  const isExcluded = excludeMatcher(exclude);
   const out2 = [];
   for (const path of paths) {
     if (isExcluded(path)) continue;
@@ -2315,7 +2318,7 @@ function onPostToolUse(input) {
     const root = repoRootOf(cwd);
     if (!root || !isSetUp(root)) return;
     const rel = repoRelative(root, file, cwd);
-    if (!rel) return;
+    if (!rel || excludeMatcher(loadConfig(root).exclude)(rel)) return;
     const { ranges, lines } = rangesOf(input.tool_response, ti, input.tool_name);
     appendEdit(root, {
       file: rel,
@@ -2333,9 +2336,10 @@ function onStop(input) {
     const cwd = typeof input.cwd === "string" ? input.cwd : process.cwd();
     const root = repoRootOf(cwd);
     if (!root || !isSetUp(root)) return null;
-    const { handoff } = loadConfig(root);
+    const { handoff, exclude } = loadConfig(root);
     if (!handoff.enabled) return null;
-    const edits = uncheckedEdits(root);
+    const isExcluded = excludeMatcher(exclude);
+    const edits = uncheckedEdits(root).filter((e) => !isExcluded(e.file));
     const unchecked = edits.reduce((n, e) => n + e.lines, 0);
     if (unchecked - getNudgedLines(root) < handoff.minLines) return null;
     const cache = readZoneCache(root);
@@ -3913,7 +3917,8 @@ function gradeSession(grades) {
   return avg >= 0.34 ? "partial" : "miss";
 }
 function handoffSet(root) {
-  const edits = uncheckedEdits(root);
+  const isExcluded = excludeMatcher(loadConfig(root).exclude);
+  const edits = uncheckedEdits(root).filter((e) => !isExcluded(e.file));
   const cache = readZoneCache(root) ?? {};
   const by = /* @__PURE__ */ new Map();
   for (const e of edits) {

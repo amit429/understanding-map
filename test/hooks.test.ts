@@ -46,6 +46,13 @@ describe('onPostToolUse', () => {
     expect(readEdits(root).map((e) => e.lines)).toEqual([2, 3]);
   });
 
+  it('does not log edits to excluded paths (default excludes and config.exclude)', () => {
+    const root = setUpRepo();
+    writeFileSync(join(umDir(root), 'config.json'), JSON.stringify({ mode: 'solo', exclude: ['gen/**'] }));
+    for (const f of ['dist/umap.js', 'node_modules/x/i.js', '.understanding/notes.md', 'gen/api.ts', 'src/a.ts']) onPostToolUse(edit(root, f, 1, 5));
+    expect(readEdits(root).map((e) => e.file)).toEqual(['src/a.ts']);
+  });
+
   it('reads notebook_path for NotebookEdit', () => {
     const root = setUpRepo();
     onPostToolUse({ session_id: 's', cwd: root, tool_name: 'NotebookEdit', tool_input: { notebook_path: join(root, 'n.ipynb'), new_source: 'a\nb' } });
@@ -123,6 +130,14 @@ describe('onStop', () => {
     const again = onStop(input);
     expect(again).toContain('~110 lines');
     expect(again).not.toContain('decision');
+  });
+
+  it('does not count already-logged edits to excluded paths toward the nudge', () => {
+    const root = setUpRepo();
+    const input = { session_id: 's', cwd: root, hook_event_name: 'Stop' };
+    seed(root, 'dist/umap.js', 500, '2025-01-01T00:00:01.000Z');
+    seed(root, 'src/a.ts', 30, '2025-01-01T00:00:02.000Z');
+    expect(onStop(input)).toBeNull();
   });
 
   it('is silent when handoff is disabled or the repo is not set up', () => {

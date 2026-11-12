@@ -3,7 +3,7 @@ import { dirname, basename, isAbsolute, join, relative, resolve } from 'node:pat
 import { isSetUp, loadConfig } from './config.js';
 import { appendEdit, getNudgedLines, setNudgedLines, uncheckedEdits } from './editlog.js';
 import { repoRootOf } from './git.js';
-import { readZoneCache } from './zones.js';
+import { excludeMatcher, readZoneCache } from './zones.js';
 
 const isObj = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
 
@@ -87,7 +87,7 @@ export function onPostToolUse(input: unknown): void {
     const root = repoRootOf(cwd);
     if (!root || !isSetUp(root)) return;
     const rel = repoRelative(root, file, cwd);
-    if (!rel) return;
+    if (!rel || excludeMatcher(loadConfig(root).exclude)(rel)) return;
     const { ranges, lines } = rangesOf(input.tool_response, ti, input.tool_name);
     appendEdit(root, {
       file: rel, ranges, lines,
@@ -104,9 +104,10 @@ export function onStop(input: unknown): string | null {
     const cwd = typeof input.cwd === 'string' ? input.cwd : process.cwd();
     const root = repoRootOf(cwd);
     if (!root || !isSetUp(root)) return null;
-    const { handoff } = loadConfig(root);
+    const { handoff, exclude } = loadConfig(root);
     if (!handoff.enabled) return null;
-    const edits = uncheckedEdits(root);
+    const isExcluded = excludeMatcher(exclude);
+    const edits = uncheckedEdits(root).filter((e) => !isExcluded(e.file));
     const unchecked = edits.reduce((n, e) => n + e.lines, 0);
     if (unchecked - getNudgedLines(root) < handoff.minLines) return null;
     const cache = readZoneCache(root);

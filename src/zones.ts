@@ -15,8 +15,13 @@ const SPLIT_ABOVE = 3000;
 const MERGE_BELOW = 150;
 const ROOT_ID = '(root)';
 
+/** Matches paths left off the map: DEFAULT_EXCLUDES plus config.exclude. */
+export function excludeMatcher(exclude: string[]): (path: string) => boolean {
+  return picomatch([...DEFAULT_EXCLUDES, ...exclude], { dot: true });
+}
+
 export function readFileEntries(root: string, paths: string[], exclude: string[]): FileEntry[] {
-  const isExcluded = picomatch([...DEFAULT_EXCLUDES, ...exclude], { dot: true });
+  const isExcluded = excludeMatcher(exclude);
   const out: FileEntry[] = [];
   for (const path of paths) {
     if (isExcluded(path)) continue;

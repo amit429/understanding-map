@@ -2,7 +2,8 @@ import { dirname } from 'node:path';
 import { addFlag, appendAttempt, appendLocalPartial, appendPass, removeFlag } from './events.js';
 import { markChecked, uncheckedEdits } from './editlog.js';
 import { buildMap } from './pipeline.js';
-import { readZoneCache } from './zones.js';
+import { loadConfig } from './config.js';
+import { excludeMatcher, readZoneCache } from './zones.js';
 import type { EditLogEntry, ZoneState } from './types.js';
 import { HANDOFF_PASS_LEVEL, PARTIAL_LEVEL, SESSION_PASS_LEVEL } from './weights.js';
 
@@ -21,8 +22,10 @@ export function gradeSession(grades: Grade[]): Grade {
   return avg >= 0.34 ? 'partial' : 'miss';
 }
 
+/** Unchecked agent edits grouped by zone; edits to excluded paths (dist/, node_modules/, config.exclude …) are left out. */
 export function handoffSet(root: string): { totalLines: number; zones: Array<{ zone: string; lines: number; files: string[] }>; edits: EditLogEntry[] } {
-  const edits = uncheckedEdits(root);
+  const isExcluded = excludeMatcher(loadConfig(root).exclude);
+  const edits = uncheckedEdits(root).filter((e) => !isExcluded(e.file));
   const cache = readZoneCache(root) ?? {};
   const by = new Map<string, { zone: string; lines: number; files: string[] }>();
   for (const e of edits) {
