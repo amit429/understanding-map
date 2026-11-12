@@ -42,6 +42,20 @@ describe('buildMap reviews', () => {
   });
 });
 
+describe('buildMap review cache', () => {
+  it('reads the review cache by default only when githubReviews is on', () => {
+    const root = fixture();
+    mkdirSync(join(root, '.understanding', 'local'), { recursive: true });
+    writeFileSync(join(root, '.understanding', 'local', 'reviews-cache.json'),
+      JSON.stringify({ fetchedAt: new Date().toISOString(), counts: { 'human/h.ts': { dev: 2 } } }));
+    const reviewed = () => buildMap(root, { now: NOW, homeDir: emptyHome() }).zones.find((z) => z.zone.id === 'human')!
+      .people.find((p) => p.handle === 'dev')!.evidence.some((e) => e.kind === 'review');
+    expect(reviewed()).toBe(false);
+    writeFileSync(join(root, '.understanding', 'config.json'), JSON.stringify({ githubReviews: true }));
+    expect(reviewed()).toBe(true);
+  });
+});
+
 describe('buildMap fixes', () => {
   it('does not double-count backfilled edits from sessions the live log already has', () => {
     const root = fixture();

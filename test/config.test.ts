@@ -24,6 +24,12 @@ describe('loadConfig', () => {
     expect(c.halfLifeDays).toBe(180);
     expect(c.historyDays).toBe(730);
     expect(c.handoff).toEqual({ enabled: true, minLines: 50 });
+    expect(c.githubReviews).toBe(false);
+  });
+
+  it('accepts githubReviews as a boolean and rejects anything else', () => {
+    expect(loadConfig(repoWith('{"githubReviews":true}')).githubReviews).toBe(true);
+    expect(() => loadConfig(repoWith('{"githubReviews":"yes"}'))).toThrow(/githubReviews/);
   });
 
   it('deep-merges a partial config', () => {

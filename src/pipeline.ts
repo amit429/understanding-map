@@ -3,6 +3,7 @@ import { agentLinesByCommit, backfillSessionEdits, isoWeek, readAgentShares, syn
 import { loadConfig } from './config.js';
 import { readEdits } from './editlog.js';
 import { readFlags, readLocalPartials, readPasses } from './events.js';
+import { cachedReviews } from './reviews.js';
 import { commitsWithNotes, currentEmail, defaultBranchRef, listTrackedFiles, readHistory } from './git.js';
 import { handleFor } from './identity.js';
 import { fanInByZone } from './imports.js';
@@ -13,7 +14,10 @@ import { buildZones, readFileEntries, writeZoneCache, zoneIndex } from './zones.
 export interface BuildOptions {
   now?: Date;
   reviews?: Record<string, Record<string, number>>;
-  /** PR review comment counts per file path and handle; folded into zone counts. */
+  /**
+   * PR review comment counts per file path and reviewer; folded into zone counts. Defaults to the review cache
+   * (never gh) when `githubReviews` is on, so every caller (zone, who, pick, record) sees the same signal as map.
+   */
   reviewsByPath?: Record<string, Record<string, number>>;
   /** Where session logs are looked up for solo backfill. Defaults to the user's home directory. */
   homeDir?: string;
@@ -92,7 +96,7 @@ export function buildMap(root: string, opts: BuildOptions = {}): MapResult {
     passes: readPasses(root, defaultRef),
     localPartials: readLocalPartials(root),
     fanIn: fanInByZone(root, files, zones, commits),
-    reviews: foldReviews(zones, opts.reviews ?? {}, opts.reviewsByPath ?? {}),
+    reviews: foldReviews(zones, opts.reviews ?? {}, opts.reviewsByPath ?? cachedReviews(root, config)),
     flags: readFlags(root),
   });
 }

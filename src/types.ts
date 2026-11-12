@@ -4,6 +4,8 @@ export interface Config {
   mode: 'solo' | 'team'; zones: Record<string, string[]>; critical: string[]; exclude: string[];
   threshold: number; fadingFloor: number; activeDays: number; halfLifeDays: number; historyDays: number;
   handoff: { enabled: boolean; minLines: number }; handles: Record<string, string>;
+  /** Opt-in PR review signal via the GitHub CLI; off by default, so the map makes no network calls. */
+  githubReviews: boolean;
 }
 export interface FileEntry { path: string; loc: number; hash: string }
 export interface Zone { id: string; files: string[]; loc: number; fingerprint: Record<string, string> }

@@ -68,12 +68,13 @@ export interface ReviewDeps {
 }
 
 /**
- * PR review signal via gh, when available. A fresh cache is used before gh is even probed. Optional: any failure
- * yields no reviews and never affects the map.
+ * PR review signal via gh, only when `githubReviews` is on (opt-in; off by default, so no network calls) and
+ * UMAP_NO_GH is not "1". A fresh cache is used before gh is even probed. Any failure yields no reviews and never
+ * affects the map.
  */
 export function optionalReviews(root: string, config: Config, deps: ReviewDeps = { ghAvailable }): PathCounts {
   try {
-    if (process.env.UMAP_NO_GH === '1') return {};
+    if (!config.githubReviews || process.env.UMAP_NO_GH === '1') return {};
     const cached = readReviewCache(root);
     if (cached) return cached;
     if (!deps.ghAvailable(root)) return {};

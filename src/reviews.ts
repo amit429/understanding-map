@@ -39,6 +39,11 @@ export function readReviewCache(root: string): Counts | null {
   }
 }
 
+/** Cache-only review counts (never calls gh), and only when the opt-in `githubReviews` signal is on. */
+export function cachedReviews(root: string, config: Config): PathCounts {
+  return config.githubReviews ? readReviewCache(root) ?? {} : {};
+}
+
 function writeCache(root: string, counts: Counts): void {
   try {
     mkdirSync(dirname(cachePath(root)), { recursive: true });

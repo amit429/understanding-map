@@ -14,6 +14,7 @@ export const DEFAULT_CONFIG: Config = {
   historyDays: 730,
   handoff: { enabled: true, minLines: 50 },
   handles: {},
+  githubReviews: false,
 };
 
 export class ConfigError extends Error {
@@ -62,6 +63,7 @@ function validate(raw: Record<string, unknown>): void {
     if ('enabled' in ho) check('handoff.enabled', typeof ho.enabled === 'boolean', 'a boolean');
     if ('minLines' in ho) check('handoff.minLines', isNum(ho.minLines), 'a number');
   }
+  if ('githubReviews' in raw) check('githubReviews', typeof raw.githubReviews === 'boolean', 'a boolean');
   if ('handles' in raw) {
     check('handles', isObj(raw.handles) && Object.values(raw.handles).every((v) => typeof v === 'string'), 'an object of strings');
   }

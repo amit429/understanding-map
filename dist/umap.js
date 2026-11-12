@@ -1820,7 +1820,8 @@ var DEFAULT_CONFIG = {
   halfLifeDays: 180,
   historyDays: 730,
   handoff: { enabled: true, minLines: 50 },
-  handles: {}
+  handles: {},
+  githubReviews: false
 };
 var ConfigError = class extends Error {
   constructor(field, message) {
@@ -1862,6 +1863,7 @@ function validate(raw) {
     if ("enabled" in ho) check("handoff.enabled", typeof ho.enabled === "boolean", "a boolean");
     if ("minLines" in ho) check("handoff.minLines", isNum(ho.minLines), "a number");
   }
+  if ("githubReviews" in raw) check("githubReviews", typeof raw.githubReviews === "boolean", "a boolean");
   if ("handles" in raw) {
     check("handles", isObj(raw.handles) && Object.values(raw.handles).every((v) => typeof v === "string"), "an object of strings");
   }
@@ -2614,6 +2616,74 @@ function addFlag(root, zone, flag) {
   writeFileSync5(join7(localDir3(root), "flags.json"), JSON.stringify(flags, null, 2) + "\n");
 }
 
+// src/reviews.ts
+import { execFileSync as execFileSync2 } from "node:child_process";
+import { mkdirSync as mkdirSync6, readFileSync as readFileSync7, writeFileSync as writeFileSync6 } from "node:fs";
+import { dirname as dirname3, join as join8 } from "node:path";
+var BUDGET_MS = 2e4;
+var CACHE_MS = 24 * 36e5;
+var MIN_COMMENT_CHARS = 20;
+var ghIn = (root, args, timeout) => execFileSync2("gh", args, { cwd: root, timeout, encoding: "utf8", maxBuffer: 64 * 1024 * 1024, stdio: ["ignore", "pipe", "ignore"] });
+function ghAvailable(root) {
+  try {
+    ghIn(root, ["auth", "status"], 5e3);
+    return true;
+  } catch {
+    return false;
+  }
+}
+var cachePath2 = (root) => join8(umDir(root), "local", "reviews-cache.json");
+function readReviewCache(root) {
+  try {
+    const v = JSON.parse(readFileSync7(cachePath2(root), "utf8"));
+    const at = typeof v.fetchedAt === "string" ? Date.parse(v.fetchedAt) : NaN;
+    if (Number.isNaN(at) || Date.now() - at >= CACHE_MS || typeof v.counts !== "object" || v.counts === null) return null;
+    return v.counts;
+  } catch {
+    return null;
+  }
+}
+function cachedReviews(root, config) {
+  return config.githubReviews ? readReviewCache(root) ?? {} : {};
+}
+function writeCache(root, counts) {
+  try {
+    mkdirSync6(dirname3(cachePath2(root)), { recursive: true });
+    writeFileSync6(cachePath2(root), JSON.stringify({ fetchedAt: new Date(Date.now()).toISOString(), counts }));
+  } catch {
+  }
+}
+function reviewCountsByPath(root, config, run = (args, t) => ghIn(root, args, t)) {
+  const cached = readReviewCache(root);
+  if (cached) return cached;
+  const started = Date.now();
+  const call = (args) => {
+    const left = BUDGET_MS - (Date.now() - started);
+    if (left <= 0) throw new Error("review budget exceeded");
+    return run(args, Math.max(1, left));
+  };
+  try {
+    const repo = call(["repo", "view", "--json", "nameWithOwner", "-q", ".nameWithOwner"]).trim();
+    const prs = JSON.parse(call(["api", `repos/${repo}/pulls?state=closed&per_page=50`, "--jq", "[.[] | {number, merged_at}]"]));
+    const counts = {};
+    for (const pr of prs.filter((p) => p.merged_at)) {
+      const comments = JSON.parse(call(["api", `repos/${repo}/pulls/${pr.number}/comments?per_page=100`]));
+      for (const c of comments) {
+        const login = c.user?.login;
+        if (!c.path || !login || (c.body ?? "").trim().length < MIN_COMMENT_CHARS) continue;
+        const handle = config.handles[login] ?? login.toLowerCase();
+        counts[c.path] ??= {};
+        counts[c.path][handle] = (counts[c.path][handle] ?? 0) + 1;
+      }
+    }
+    if (Date.now() - started > BUDGET_MS) return {};
+    writeCache(root, counts);
+    return counts;
+  } catch {
+    return {};
+  }
+}
+
 // src/identity.ts
 function handleFor(email, config) {
   const override = config.handles[email];
@@ -2622,8 +2692,8 @@ function handleFor(email, config) {
 }
 
 // src/imports.ts
-import { readFileSync as readFileSync7 } from "node:fs";
-import { join as join8, posix } from "node:path";
+import { readFileSync as readFileSync8 } from "node:fs";
+import { join as join9, posix } from "node:path";
 var EXT_LANG = {
   ts: "ts",
   tsx: "ts",
@@ -2815,7 +2885,7 @@ function resolveImport(from, spec, lang, files, goModules = /* @__PURE__ */ new 
 var MIN_COCHANGE_COMMITS = 3;
 function readSource(root, path) {
   try {
-    return readFileSync7(join8(root, path), "utf8");
+    return readFileSync8(join9(root, path), "utf8");
   } catch {
     return null;
   }
@@ -3166,74 +3236,9 @@ function buildMap(root, opts = {}) {
     passes: readPasses(root, defaultRef),
     localPartials: readLocalPartials(root),
     fanIn: fanInByZone(root, files, zones, commits),
-    reviews: foldReviews(zones, opts.reviews ?? {}, opts.reviewsByPath ?? {}),
+    reviews: foldReviews(zones, opts.reviews ?? {}, opts.reviewsByPath ?? cachedReviews(root, config)),
     flags: readFlags(root)
   });
-}
-
-// src/reviews.ts
-import { execFileSync as execFileSync2 } from "node:child_process";
-import { mkdirSync as mkdirSync6, readFileSync as readFileSync8, writeFileSync as writeFileSync6 } from "node:fs";
-import { dirname as dirname3, join as join9 } from "node:path";
-var BUDGET_MS = 2e4;
-var CACHE_MS = 24 * 36e5;
-var MIN_COMMENT_CHARS = 20;
-var ghIn = (root, args, timeout) => execFileSync2("gh", args, { cwd: root, timeout, encoding: "utf8", maxBuffer: 64 * 1024 * 1024, stdio: ["ignore", "pipe", "ignore"] });
-function ghAvailable(root) {
-  try {
-    ghIn(root, ["auth", "status"], 5e3);
-    return true;
-  } catch {
-    return false;
-  }
-}
-var cachePath2 = (root) => join9(umDir(root), "local", "reviews-cache.json");
-function readReviewCache(root) {
-  try {
-    const v = JSON.parse(readFileSync8(cachePath2(root), "utf8"));
-    const at = typeof v.fetchedAt === "string" ? Date.parse(v.fetchedAt) : NaN;
-    if (Number.isNaN(at) || Date.now() - at >= CACHE_MS || typeof v.counts !== "object" || v.counts === null) return null;
-    return v.counts;
-  } catch {
-    return null;
-  }
-}
-function writeCache(root, counts) {
-  try {
-    mkdirSync6(dirname3(cachePath2(root)), { recursive: true });
-    writeFileSync6(cachePath2(root), JSON.stringify({ fetchedAt: new Date(Date.now()).toISOString(), counts }));
-  } catch {
-  }
-}
-function reviewCountsByPath(root, config, run = (args, t) => ghIn(root, args, t)) {
-  const cached = readReviewCache(root);
-  if (cached) return cached;
-  const started = Date.now();
-  const call = (args) => {
-    const left = BUDGET_MS - (Date.now() - started);
-    if (left <= 0) throw new Error("review budget exceeded");
-    return run(args, Math.max(1, left));
-  };
-  try {
-    const repo = call(["repo", "view", "--json", "nameWithOwner", "-q", ".nameWithOwner"]).trim();
-    const prs = JSON.parse(call(["api", `repos/${repo}/pulls?state=closed&per_page=50`, "--jq", "[.[] | {number, merged_at}]"]));
-    const counts = {};
-    for (const pr of prs.filter((p) => p.merged_at)) {
-      const comments = JSON.parse(call(["api", `repos/${repo}/pulls/${pr.number}/comments?per_page=100`]));
-      for (const c of comments) {
-        const login = c.user?.login;
-        if (!c.path || !login || (c.body ?? "").trim().length < MIN_COMMENT_CHARS) continue;
-        const handle = config.handles[login] ?? login.toLowerCase();
-        counts[c.path] ??= {};
-        counts[c.path][handle] = (counts[c.path][handle] ?? 0) + 1;
-      }
-    }
-    if (Date.now() - started > BUDGET_MS) return {};
-    writeCache(root, counts);
-    return counts;
-  } catch {
-    return {};
-  }
 }
 
 // src/report.ts
@@ -4051,7 +4056,7 @@ function findZone(m, root, target) {
 }
 function optionalReviews(root, config, deps = { ghAvailable }) {
   try {
-    if (process.env.UMAP_NO_GH === "1") return {};
+    if (!config.githubReviews || process.env.UMAP_NO_GH === "1") return {};
     const cached = readReviewCache(root);
     if (cached) return cached;
     if (!deps.ghAvailable(root)) return {};

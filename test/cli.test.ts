@@ -169,16 +169,36 @@ describe('cli record and handoff', () => {
   });
 });
 
+const ON = { ...DEFAULT_CONFIG, githubReviews: true };
+const writeReviewCache = (dir: string, counts: unknown) => {
+  mkdirSync(join(dir, '.understanding', 'local'), { recursive: true });
+  writeFileSync(join(dir, '.understanding', 'local', 'reviews-cache.json'), JSON.stringify({ fetchedAt: new Date().toISOString(), counts }));
+};
+const writeConfig = (dir: string, config: unknown) => {
+  mkdirSync(join(dir, '.understanding'), { recursive: true });
+  writeFileSync(join(dir, '.understanding', 'config.json'), JSON.stringify(config));
+};
+
 describe('optionalReviews', () => {
   const root = () => mkdtempSync(join(tmpdir(), 'umap-opt-'));
 
+  it('is off by default: never probes gh and ignores even a fresh cache', () => {
+    const dir = root();
+    writeReviewCache(dir, { 'a.ts': { al: 1 } });
+    const probe = vi.fn(() => true);
+    const run = vi.fn(() => '');
+    expect(optionalReviews(dir, DEFAULT_CONFIG, { ghAvailable: probe, run })).toEqual({});
+    expect(probe).not.toHaveBeenCalled();
+    expect(run).not.toHaveBeenCalled();
+  });
+
   it('yields {} when gh is unavailable, throws, or UMAP_NO_GH=1, so map is unaffected', () => {
-    expect(optionalReviews(root(), DEFAULT_CONFIG, { ghAvailable: () => false })).toEqual({});
-    expect(optionalReviews(root(), DEFAULT_CONFIG, { ghAvailable: () => { throw new Error('boom'); } })).toEqual({});
-    expect(optionalReviews(root(), DEFAULT_CONFIG, { ghAvailable: () => true, run: () => { throw new Error('gh failed'); } })).toEqual({});
+    expect(optionalReviews(root(), ON, { ghAvailable: () => false })).toEqual({});
+    expect(optionalReviews(root(), ON, { ghAvailable: () => { throw new Error('boom'); } })).toEqual({});
+    expect(optionalReviews(root(), ON, { ghAvailable: () => true, run: () => { throw new Error('gh failed'); } })).toEqual({});
     vi.stubEnv('UMAP_NO_GH', '1');
     const probe = vi.fn(() => true);
-    expect(optionalReviews(root(), DEFAULT_CONFIG, { ghAvailable: probe })).toEqual({});
+    expect(optionalReviews(root(), ON, { ghAvailable: probe })).toEqual({});
     expect(probe).not.toHaveBeenCalled();
   });
 
@@ -186,17 +206,27 @@ describe('optionalReviews', () => {
     const dir = fixture();
     const r = await run(dir, ['map', '--no-report', '--json']);
     expect(r.code).toBe(0);
-    expect(optionalReviews(dir, DEFAULT_CONFIG, { ghAvailable: () => true, run: () => { throw new Error('x'); } })).toEqual({});
+    expect(optionalReviews(dir, ON, { ghAvailable: () => true, run: () => { throw new Error('x'); } })).toEqual({});
     expect(JSON.parse(r.stdout).zones.length).toBeGreaterThan(0);
   });
 
   it('a fresh cache is used without probing gh', () => {
     const dir = root();
-    mkdirSync(join(dir, '.understanding', 'local'), { recursive: true });
-    writeFileSync(join(dir, '.understanding', 'local', 'reviews-cache.json'),
-      JSON.stringify({ fetchedAt: new Date().toISOString(), counts: { 'a.ts': { al: 1 } } }));
+    writeReviewCache(dir, { 'a.ts': { al: 1 } });
     const probe = vi.fn(() => false);
-    expect(optionalReviews(dir, DEFAULT_CONFIG, { ghAvailable: probe })).toEqual({ 'a.ts': { al: 1 } });
+    expect(optionalReviews(dir, ON, { ghAvailable: probe })).toEqual({ 'a.ts': { al: 1 } });
     expect(probe).not.toHaveBeenCalled();
+  });
+});
+
+describe('cached reviews in every command', () => {
+  it('who and zone use the review cache only when githubReviews is on', async () => {
+    const dir = fixture();
+    writeReviewCache(dir, { 'human/h.ts': { dev: 3 } });
+    const reviewed = (s: string) => s.includes('reviewed 3 changes here');
+    expect(reviewed((await run(dir, ['who', 'human/h.ts'])).stdout)).toBe(false);
+    writeConfig(dir, { githubReviews: true });
+    expect(reviewed((await run(dir, ['who', 'human/h.ts'])).stdout)).toBe(true);
+    expect(reviewed((await run(dir, ['zone', 'human', '--json'])).stdout)).toBe(true);
   });
 });
