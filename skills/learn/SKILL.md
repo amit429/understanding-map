@@ -79,6 +79,8 @@ The first line it prints is always `Result: pass`, `Result: partial` or `Result:
 
 A pass also clears the zone's "hard to verify" and "unreviewed agent code" marks.
 
+You may end with one optional line: "Want to see it? /understanding-map:visualize <zone id>".
+
 ## Stopping
 
 If the user stops, skips or changes topic at any point, stop there and record nothing: no `record`, no `unverifiable`. No guilt, no nagging. Aim to finish the whole session in under 5 minutes.

@@ -18,7 +18,7 @@ function frontmatter(text: string): Record<string, string> {
   return out;
 }
 
-const SKILLS = ['setup', 'map', 'learn', 'handoff', 'who'];
+const SKILLS = ['setup', 'map', 'learn', 'handoff', 'who', 'visualize'];
 const skillText = (name: string) => read(`skills/${name}/SKILL.md`);
 const umapCommands = (text: string) => [...text.matchAll(/umap\.js"?\s+([a-z][a-z-]*)/g)].map((m) => m[1]);
 
@@ -34,7 +34,7 @@ describe('plugin manifest', () => {
 });
 
 describe('skills', () => {
-  it('exist for exactly the five commands', () => {
+  it('exist for exactly the six commands', () => {
     const dirs = readdirSync(join(ROOT, 'skills')).filter((d) => existsSync(join(ROOT, 'skills', d, 'SKILL.md')));
     expect(dirs.sort()).toEqual([...SKILLS].sort());
   });
@@ -65,7 +65,7 @@ describe('skills', () => {
     expect(text).toContain('record --kind session');
   });
 
-  it.each(['learn', 'handoff'])('%s treats anything but an explicit "confirmed": true as unconfirmed', (name) => {
+  it.each(['learn', 'handoff', 'visualize'])('%s treats anything but an explicit "confirmed": true as unconfirmed', (name) => {
     const text = skillText(name);
     expect(text).toContain('`"confirmed": true`');
     expect(text).toMatch(/missing id, malformed or non-JSON output, or an error/);
@@ -73,7 +73,21 @@ describe('skills', () => {
 
   it.each(SKILLS)('%s quotes zone ids and paths in every engine command', (name) => {
     const text = skillText(name);
-    expect(text).not.toMatch(/--zones? <|umap\.js" (zone|who) </);
+    expect(text).not.toMatch(/--zones? <|umap\.js" (zone|who|context|visualize) </);
+  });
+
+  it('visualize gets context, checks the cache, verifies every claim and renders, but never records', () => {
+    const text = skillText('visualize');
+    expect(frontmatter(text)['argument-hint']).toBe('[zone or path]');
+    for (const s of ['umap.js" context', '--cached --json', 'answer-key-checker', 'storyboard claims', '--storyboard', 'unverifiable --zone', '/understanding-map:learn']) {
+      expect(text).toContain(s);
+    }
+    expect(text).not.toMatch(/umap\.js" record\b/);
+    expect(text.toLowerCase()).toContain('never record');
+  });
+
+  it('learn offers the visual at the end', () => {
+    expect(skillText('learn')).toContain('Want to see it? /understanding-map:visualize');
   });
 
   it('handoff verifies questions, records handoffs and supports skipping', () => {
@@ -90,6 +104,12 @@ describe('answer-key-checker agent', () => {
     expect(fm.name).toBe('answer-key-checker');
     expect(fm.description?.length ?? 0).toBeGreaterThan(20);
     expect(fm.tools.split(',').map((t) => t.trim()).sort()).toEqual(['Glob', 'Grep', 'Read']);
+  });
+
+  it('also checks storyboard claims, with the same output format', () => {
+    const text = read('agents/answer-key-checker.md');
+    expect(text).toContain('Storyboard claims');
+    for (const kind of ['hop', 'role', 'step', 'order', 'gotcha']) expect(text).toContain(`\`${kind}\``);
   });
 });
 
@@ -110,7 +130,7 @@ describe('hooks.json', () => {
 });
 
 describe('README', () => {
-  it('names all five commands and says scores are estimates', () => {
+  it('names all six commands and says scores are estimates', () => {
     const text = read('README.md');
     for (const s of SKILLS) expect(text).toContain(`/understanding-map:${s}`);
     expect(text.toLowerCase()).toContain('estimate');

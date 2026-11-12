@@ -81,6 +81,7 @@ It never blocks and is always skippable.
 | `/understanding-map:learn [zone or path]` | Run a 5-minute learning session. With no argument it picks the top danger zone; `/understanding-map:learn src/payments` targets one. |
 | `/understanding-map:handoff` | Run a 60-second check on what agents changed since your last check. |
 | `/understanding-map:who <path>` | See who understands the zone containing a file, and the evidence. |
+| `/understanding-map:visualize [zone or path]` | Watch a short animation of one zone: what it does for the product, then how it works inside, every step tied to a real `file:line`. |
 
 You can also just ask, for example "which parts of this repo does nobody understand?" or "teach me the auth code". The matching skill loads on its own.
 
