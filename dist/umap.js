@@ -2755,22 +2755,23 @@ var PATTERNS = {
     /^[ \t]*use\s+(?:function\s+|const\s+)?([\w\\]+)/gm
   ]
 };
-function extractImports(lang, source) {
+function importMatches(lang, source) {
+  const all = (re, text, offset = 0) => [...text.matchAll(re)].map((m) => ({ spec: m[1], index: offset + m.index }));
   if (lang === "go") {
-    const blocks = [...source.matchAll(/\bimport\s*\(([\s\S]*?)\)/g)].map((m) => m[1]);
-    const single = [...source.matchAll(PATTERNS.go[0])].map((m) => m[1]);
-    const grouped = blocks.flatMap((b) => [...b.matchAll(PATTERNS.go[1])].map((m) => m[1]));
-    return [.../* @__PURE__ */ new Set([...single, ...grouped])];
+    const single = all(PATTERNS.go[0], source);
+    const grouped = [...source.matchAll(/\bimport\s*\(([\s\S]*?)\)/g)].flatMap((b) => {
+      const start = b.index + b[0].indexOf("(") + 1;
+      return all(PATTERNS.go[1], b[1], start).map((m) => {
+        const lead = source.slice(m.index).match(/^\s*/)[0].length;
+        return { spec: m.spec, index: m.index + lead };
+      });
+    });
+    return [...single, ...grouped];
   }
   if (lang === "rs") {
-    const out3 = [];
-    for (const m of source.matchAll(PATTERNS.rs[0])) out3.push(m[1]);
-    for (const m of source.matchAll(PATTERNS.rs[1])) out3.push(`self::${m[1]}`);
-    return [...new Set(out3)];
+    return [...all(PATTERNS.rs[0], source), ...all(PATTERNS.rs[1], source).map((m) => ({ ...m, spec: `self::${m.spec}` }))];
   }
-  const out2 = /* @__PURE__ */ new Set();
-  for (const re of PATTERNS[lang]) for (const m of source.matchAll(re)) out2.add(m[1]);
-  return [...out2];
+  return PATTERNS[lang].flatMap((re) => all(re, source));
 }
 var indexCache = /* @__PURE__ */ new WeakMap();
 function indexOf(files) {
@@ -2912,10 +2913,12 @@ function readSource(root, path) {
     return null;
   }
 }
-function fanInByZone(root, files, zones, commits) {
-  const known = new Set(files.map((f) => f.path));
-  const zoneOf = zoneIndex(zones);
-  const importers = new Map(zones.map((z) => [z.id, /* @__PURE__ */ new Set()]));
+var lineAt = (source, index2) => {
+  let n = 1;
+  for (let i = source.indexOf("\n"); i >= 0 && i < index2; i = source.indexOf("\n", i + 1)) n++;
+  return n;
+};
+function scanEdges(root, known, from = known) {
   const filesByDir = /* @__PURE__ */ new Map();
   for (const p of known) {
     for (let d = dirOf2(p); ; d = dirOf2(d)) {
@@ -2929,22 +2932,39 @@ function fanInByZone(root, files, zones, commits) {
     const m = readSource(root, p)?.match(/^\s*module\s+(\S+)/m);
     if (m) goModules.set(dirOf2(p), m[1].replace(/^"|"$/g, ""));
   }
-  const hasSupported = /* @__PURE__ */ new Set();
-  for (const [path, zid] of zoneOf) {
+  const edges = [];
+  const seen = /* @__PURE__ */ new Set();
+  for (const path of from) {
     const lang = languageOf(path);
     if (!lang || !known.has(path)) continue;
-    hasSupported.add(zid);
     const src = readSource(root, path);
     if (src === null) continue;
-    for (const spec of extractImports(lang, src)) {
+    for (const { spec, index: index2 } of importMatches(lang, src)) {
       const target = resolveImport(path, spec, lang, known, goModules);
       if (!target) continue;
+      const line = lineAt(src, index2);
       const targets = known.has(target) ? [target] : [...filesByDir.get(target) ?? []];
       for (const t of targets) {
-        const tz = zoneOf.get(t);
-        if (tz && tz !== zid) importers.get(tz).add(path);
+        const key = `${path}\0${line}\0${t}`;
+        if (t === path || seen.has(key)) continue;
+        seen.add(key);
+        edges.push({ fromFile: path, line, toFile: t });
       }
     }
+  }
+  return edges.sort((a, b) => cmp(a.fromFile, b.fromFile) || a.line - b.line || cmp(a.toFile, b.toFile));
+}
+var cmp = (a, b) => a < b ? -1 : a > b ? 1 : 0;
+function fanInByZone(root, files, zones, commits) {
+  const known = new Set(files.map((f) => f.path));
+  const zoneOf = zoneIndex(zones);
+  const importers = new Map(zones.map((z) => [z.id, /* @__PURE__ */ new Set()]));
+  const hasSupported = /* @__PURE__ */ new Set();
+  for (const [path, zid] of zoneOf) if (languageOf(path) && known.has(path)) hasSupported.add(zid);
+  for (const e of scanEdges(root, known, zoneOf.keys())) {
+    const fz = zoneOf.get(e.fromFile);
+    const tz = zoneOf.get(e.toFile);
+    if (fz && tz && tz !== fz) importers.get(tz).add(e.fromFile);
   }
   const result = {};
   for (const z of zones) {

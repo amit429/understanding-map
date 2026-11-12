@@ -34,23 +34,32 @@ const PATTERNS: Record<Lang, RegExp[]> = {
   ],
 };
 
-export function extractImports(lang: Lang, source: string): string[] {
+interface ImportMatch { spec: string; index: number }
+
+/** Every import specifier in `source` with the offset of the statement that names it (duplicates kept). */
+function importMatches(lang: Lang, source: string): ImportMatch[] {
+  const all = (re: RegExp, text: string, offset = 0) =>
+    [...text.matchAll(re)].map((m) => ({ spec: m[1], index: offset + m.index! }));
   if (lang === 'go') {
     // Go grouped imports: only treat quoted lines inside `import ( ... )` as imports.
-    const blocks = [...source.matchAll(/\bimport\s*\(([\s\S]*?)\)/g)].map((m) => m[1]);
-    const single = [...source.matchAll(PATTERNS.go[0])].map((m) => m[1]);
-    const grouped = blocks.flatMap((b) => [...b.matchAll(PATTERNS.go[1])].map((m) => m[1]));
-    return [...new Set([...single, ...grouped])];
+    const single = all(PATTERNS.go[0], source);
+    const grouped = [...source.matchAll(/\bimport\s*\(([\s\S]*?)\)/g)].flatMap((b) => {
+      const start = b.index! + b[0].indexOf('(') + 1;
+      return all(PATTERNS.go[1], b[1], start).map((m) => {
+        const lead = source.slice(m.index).match(/^\s*/)![0].length; // the match may start on the previous line
+        return { spec: m.spec, index: m.index + lead };
+      });
+    });
+    return [...single, ...grouped];
   }
   if (lang === 'rs') {
-    const out: string[] = [];
-    for (const m of source.matchAll(PATTERNS.rs[0])) out.push(m[1]);
-    for (const m of source.matchAll(PATTERNS.rs[1])) out.push(`self::${m[1]}`);
-    return [...new Set(out)];
+    return [...all(PATTERNS.rs[0], source), ...all(PATTERNS.rs[1], source).map((m) => ({ ...m, spec: `self::${m.spec}` }))];
   }
-  const out = new Set<string>();
-  for (const re of PATTERNS[lang]) for (const m of source.matchAll(re)) out.add(m[1]);
-  return [...out];
+  return PATTERNS[lang].flatMap((re) => all(re, source));
+}
+
+export function extractImports(lang: Lang, source: string): string[] {
+  return [...new Set(importMatches(lang, source).map((m) => m.spec))];
 }
 
 interface Index { dirs: Set<string>; list: string[] }
@@ -204,10 +213,20 @@ function readSource(root: string, path: string): string | null {
   }
 }
 
-export function fanInByZone(root: string, files: FileEntry[], zones: Zone[], commits: Commit[]): Record<string, number> {
-  const known = new Set(files.map((f) => f.path));
-  const zoneOf = zoneIndex(zones);
-  const importers = new Map<string, Set<string>>(zones.map((z) => [z.id, new Set<string>()]));
+/** A resolved import: `line` is the 1-based line of the import statement in `fromFile`. */
+export interface ImportEdge { fromFile: string; line: number; toFile: string }
+
+const lineAt = (source: string, index: number) => {
+  let n = 1;
+  for (let i = source.indexOf('\n'); i >= 0 && i < index; i = source.indexOf('\n', i + 1)) n++;
+  return n;
+};
+
+/**
+ * Resolves every import in `from` (default: all known files) against the known files. A directory target (Go, C#,
+ * Java packages) expands to every file under it. Edges are unique per (fromFile, line, toFile), never self edges.
+ */
+function scanEdges(root: string, known: Set<string>, from: Iterable<string> = known): ImportEdge[] {
   const filesByDir = new Map<string, Set<string>>();
   for (const p of known) {
     for (let d = dirOf(p); ; d = dirOf(d)) {
@@ -223,22 +242,47 @@ export function fanInByZone(root: string, files: FileEntry[], zones: Zone[], com
     if (m) goModules.set(dirOf(p), m[1].replace(/^"|"$/g, ''));
   }
 
-  const hasSupported = new Set<string>();
-  for (const [path, zid] of zoneOf) {
+  const edges: ImportEdge[] = [];
+  const seen = new Set<string>();
+  for (const path of from) {
     const lang = languageOf(path);
     if (!lang || !known.has(path)) continue;
-    hasSupported.add(zid);
     const src = readSource(root, path);
     if (src === null) continue;
-    for (const spec of extractImports(lang, src)) {
+    for (const { spec, index } of importMatches(lang, src)) {
       const target = resolveImport(path, spec, lang, known, goModules);
       if (!target) continue;
+      const line = lineAt(src, index);
       const targets = known.has(target) ? [target] : [...(filesByDir.get(target) ?? [])];
       for (const t of targets) {
-        const tz = zoneOf.get(t);
-        if (tz && tz !== zid) importers.get(tz)!.add(path);
+        const key = `${path}\0${line}\0${t}`;
+        if (t === path || seen.has(key)) continue;
+        seen.add(key);
+        edges.push({ fromFile: path, line, toFile: t });
       }
     }
+  }
+  return edges.sort((a, b) => cmp(a.fromFile, b.fromFile) || a.line - b.line || cmp(a.toFile, b.toFile));
+}
+
+const cmp = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
+
+/** Resolved import edges between the given repository files, with the line of each import statement. */
+export function importEdges(root: string, files: Array<FileEntry | string>): ImportEdge[] {
+  return scanEdges(root, new Set(files.map((f) => (typeof f === 'string' ? f : f.path))));
+}
+
+export function fanInByZone(root: string, files: FileEntry[], zones: Zone[], commits: Commit[]): Record<string, number> {
+  const known = new Set(files.map((f) => f.path));
+  const zoneOf = zoneIndex(zones);
+  const importers = new Map<string, Set<string>>(zones.map((z) => [z.id, new Set<string>()]));
+
+  const hasSupported = new Set<string>();
+  for (const [path, zid] of zoneOf) if (languageOf(path) && known.has(path)) hasSupported.add(zid);
+  for (const e of scanEdges(root, known, zoneOf.keys())) {
+    const fz = zoneOf.get(e.fromFile);
+    const tz = zoneOf.get(e.toFile);
+    if (fz && tz && tz !== fz) importers.get(tz)!.add(e.fromFile);
   }
 
   const result: Record<string, number> = {};

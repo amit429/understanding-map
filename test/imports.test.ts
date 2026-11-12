@@ -2,7 +2,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { extractImports, fanInByZone, languageOf, resolveImport } from '../src/imports';
+import { extractImports, fanInByZone, importEdges, languageOf, resolveImport } from '../src/imports';
 import type { Commit, FileEntry, Zone } from '../src/types';
 
 const dirs: string[] = [];
@@ -165,5 +165,42 @@ describe('fanInByZone', () => {
     const r = fanInByZone(root, [...sh, ...others].map(fe), zones, commits);
     expect(r.scripts).toBe(4);
     expect(r.x).toBe(0);
+  });
+});
+
+describe('importEdges', () => {
+  it('returns resolved edges with the 1-based line of each import statement', () => {
+    const root = tmp();
+    put(root, 'core/c.ts', 'export const c = 1;\n');
+    put(root, 'core/index.ts', "export * from './c';\n");
+    put(root, 'api/a.ts', "// header\nimport fs from 'node:fs';\nimport {\n  c,\n} from '../core/c';\nconst x = require('../core');\n");
+    const paths = ['core/c.ts', 'core/index.ts', 'api/a.ts'];
+    const edges = importEdges(root, paths);
+    expect(edges).toEqual([
+      { fromFile: 'api/a.ts', line: 3, toFile: 'core/c.ts' },
+      { fromFile: 'api/a.ts', line: 6, toFile: 'core/index.ts' },
+      { fromFile: 'core/index.ts', line: 1, toFile: 'core/c.ts' },
+    ]);
+  });
+
+  it('expands directory targets to their files and keeps grouped Go imports on their own lines', () => {
+    const root = tmp();
+    put(root, 'go.mod', 'module github.com/x/proj\n');
+    put(root, 'internal/store/a.go', 'package store');
+    put(root, 'internal/store/b.go', 'package store');
+    put(root, 'cmd/m.go', 'package main\n\nimport (\n  "fmt"\n  "github.com/x/proj/internal/store"\n)\n');
+    const paths = ['go.mod', 'internal/store/a.go', 'internal/store/b.go', 'cmd/m.go'];
+    expect(importEdges(root, paths)).toEqual([
+      { fromFile: 'cmd/m.go', line: 5, toFile: 'internal/store/a.go' },
+      { fromFile: 'cmd/m.go', line: 5, toFile: 'internal/store/b.go' },
+    ]);
+  });
+
+  it('accepts FileEntry lists, skips unreadable files and never returns self edges', () => {
+    const root = tmp();
+    put(root, 'a/x.py', 'from .y import z\nimport a.x\n');
+    put(root, 'a/y.py', '');
+    const edges = importEdges(root, ['a/x.py', 'a/y.py', 'a/missing.py'].map(fe));
+    expect(edges).toEqual([{ fromFile: 'a/x.py', line: 1, toFile: 'a/y.py' }]);
   });
 });
