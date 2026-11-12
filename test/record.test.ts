@@ -1,8 +1,8 @@
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { appendEdit, uncheckedEdits } from '../src/editlog';
-import { addFlag, readFlags, removeFlag } from '../src/events';
+import { addFlag, appendPass, readFlags, removeFlag } from '../src/events';
 import { buildMap } from '../src/pipeline';
 import { gradeSession, handoffSet, markUnverifiable, recordResult, skipHandoff } from '../src/record';
 import { daysAgo, emptyHome, fixture, NOW } from './helpers/fixture';
@@ -35,6 +35,13 @@ describe('recordResult session', () => {
     const [ev] = lines(um(root, 'events', 'dev.jsonl'));
     expect(ev).toMatchObject({ zone: 'agent', level: 80, kind: 'session', date: NOW.toISOString(), fingerprint: before.zone.fingerprint });
     expect(r.changes[0]).toMatchObject({ zone: 'agent', before: 'dark', after: 'owned', levelAfter: 80 });
+  });
+
+  it('appendPass never writes outside events/, whatever the handle', () => {
+    const { root } = setup();
+    appendPass(root, '../../evil', { zone: 'agent', level: 80, fingerprint: {}, date: NOW.toISOString(), kind: 'session' });
+    expect(readdirSync(um(root, 'events'))).toEqual(['..-..-evil.jsonl']);
+    expect(existsSync(join(root, 'evil.jsonl'))).toBe(false);
   });
 
   it('a partial writes only local/partials.jsonl and an attempt, never events/', () => {

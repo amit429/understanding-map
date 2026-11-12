@@ -2559,6 +2559,18 @@ function readAgentShares(root, defaultRef) {
 // src/events.ts
 import { appendFileSync as appendFileSync3, mkdirSync as mkdirSync5, readFileSync as readFileSync6, writeFileSync as writeFileSync5 } from "node:fs";
 import { join as join7 } from "node:path";
+
+// src/identity.ts
+function sanitizeHandle(s) {
+  const h = s.toLowerCase().replace(/[^a-z0-9._-]/g, "-");
+  return h === "" || h === "." || h === ".." ? "unknown" : h;
+}
+function handleFor(email, config) {
+  const override = Object.hasOwn(config.handles, email) ? config.handles[email] : "";
+  return sanitizeHandle(override || email.split("@")[0]);
+}
+
+// src/events.ts
 var eventsRel = ".understanding/events";
 var localDir3 = (root) => join7(umDir(root), "local");
 function appendJsonl(dir, file, value) {
@@ -2566,7 +2578,7 @@ function appendJsonl(dir, file, value) {
   appendFileSync3(join7(dir, file), JSON.stringify(value) + "\n");
 }
 function appendPass(root, handle, ev) {
-  appendJsonl(join7(root, eventsRel), `${handle}.jsonl`, ev);
+  appendJsonl(join7(root, eventsRel), `${sanitizeHandle(handle)}.jsonl`, ev);
 }
 function readPasses(root, defaultRef) {
   const out2 = /* @__PURE__ */ new Map();
@@ -2699,13 +2711,6 @@ function reviewCountsByPath(root, run = (args, t) => ghIn(root, args, t)) {
   } catch {
     return {};
   }
-}
-
-// src/identity.ts
-function handleFor(email, config) {
-  const override = config.handles[email];
-  if (override) return override;
-  return email.split("@")[0].toLowerCase().replace(/[^a-z0-9._-]/g, "-");
 }
 
 // src/imports.ts
@@ -3241,7 +3246,7 @@ function buildMap(root, opts = {}) {
     edits.push(...backfillSessionEdits(root, opts.homeDir ?? homedir()).filter((e) => !live.has(e.session)));
   }
   const myEmail = currentEmail(root);
-  const me = handleFor(myEmail, config) || "me";
+  const me = myEmail ? handleFor(myEmail, config) : "me";
   const isMine = (email) => myEmail !== "" && handleFor(email, config) === me;
   const agentLines = agentLinesByCommit(commits, edits, notedShas, { isMine });
   const defaultRef = defaultBranchRef(root);

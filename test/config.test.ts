@@ -3,7 +3,7 @@ import { mkdtempSync, mkdirSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { loadConfig, DEFAULT_CONFIG, ConfigError } from '../src/config.js';
-import { handleFor } from '../src/identity.js';
+import { handleFor, sanitizeHandle } from '../src/identity.js';
 
 function repoWith(config?: string): string {
   const root = mkdtempSync(join(tmpdir(), 'um-'));
@@ -58,5 +58,16 @@ describe('handleFor', () => {
   it('lets config.handles override', () => {
     const cfg = { ...DEFAULT_CONFIG, handles: { 'p@x.io': 'priya' } };
     expect(handleFor('p@x.io', cfg)).toBe('priya');
+  });
+  it('sanitises every handle, including config.handles values, to a safe file name', () => {
+    const cfg = { ...DEFAULT_CONFIG, handles: { 'p@x.io': 'Priya S/../../etc', 'dot@x.io': '.', 'dots@x.io': '..', 'e@x.io': '' } };
+    expect(handleFor('p@x.io', cfg)).toBe('priya-s-..-..-etc');
+    for (const email of ['dot@x.io', 'dots@x.io', '..@x.io', '.@x.io', '@x.io', 'e@x.io']) {
+      const h = handleFor(email, cfg);
+      expect(h).toMatch(/^[a-z0-9._-]+$/);
+      expect(['', '.', '..']).not.toContain(h);
+    }
+    expect(handleFor('constructor', DEFAULT_CONFIG)).toBe('constructor');
+    expect(sanitizeHandle('Zoë')).toBe('zo-');
   });
 });

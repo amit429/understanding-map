@@ -2,6 +2,7 @@ import { appendFileSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path';
 import { umDir } from './config.js';
 import { readJsonlUnion } from './jsonl-union.js';
+import { sanitizeHandle } from './identity.js';
 import type { Flag, PassEvent } from './types.js';
 
 const eventsRel = '.understanding/events';
@@ -14,7 +15,7 @@ function appendJsonl(dir: string, file: string, value: unknown): void {
 
 /** The only per-person data shared in team mode: passes, one append-only file per handle. */
 export function appendPass(root: string, handle: string, ev: PassEvent): void {
-  appendJsonl(join(root, eventsRel), `${handle}.jsonl`, ev);
+  appendJsonl(join(root, eventsRel), `${sanitizeHandle(handle)}.jsonl`, ev);
 }
 
 export function readPasses(root: string, defaultRef: string | null): Map<string, PassEvent[]> {

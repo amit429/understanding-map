@@ -89,7 +89,7 @@ export function buildMap(root: string, opts: BuildOptions = {}): MapResult {
     edits.push(...backfillSessionEdits(root, opts.homeDir ?? homedir()).filter((e) => !live.has(e.session)));
   }
   const myEmail = currentEmail(root);
-  const me = handleFor(myEmail, config) || 'me';
+  const me = myEmail ? handleFor(myEmail, config) : 'me';
   // The edit log is this machine's agent edits: match it only to commits I authored.
   const isMine = (email: string) => myEmail !== '' && handleFor(email, config) === me;
   const agentLines = agentLinesByCommit(commits, edits, notedShas, { isMine });
